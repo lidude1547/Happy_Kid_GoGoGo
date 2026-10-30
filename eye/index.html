@@ -607,6 +607,20 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 #pos-msg.ok{background:#C8F0DC;border-color:#1F8559}
 #eye-boot.pos #boot-mascot,#eye-boot.pos h1,#eye-boot.pos .eye-steps,#eye-boot.pos #boot-help{display:none}
 #eye-boot.pos #boot-msg{position:fixed;top:5vh;left:50%;transform:translateX(-50%);font-size:clamp(22px,3.4vw,32px);font-weight:900}
+
+/* 頭不動、只用眼睛：選項排成一排 */
+.eye-mode .tiles.one-row{grid-template-columns:repeat(4,1fr)!important}
+.next-tile{border-style:dashed}
+.eye-mode .next-tile span,.eye-mode .next-tile small{color:var(--ink)}
+.cmd-row{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:6vh}
+.cmd-row .cmd{position:static;transform:none}
+.eye-mode .flip{width:min(14vw,150px);height:min(14vw,150px)}
+.eye-count.one-line .count-box{flex-wrap:nowrap}
+.eye-count.one-line .cnt{font-size:clamp(48px,8vw,96px)}
+.swatch{display:block;width:min(16vw,130px);height:min(16vw,130px);border-radius:50%;border:5px solid #fff;box-shadow:0 0 0 3px var(--soft)}
+.fill-box svg .now-fill{stroke:var(--soc);stroke-width:5;stroke-dasharray:6 4;animation:fillPulse 1s ease-in-out infinite}
+@keyframes fillPulse{50%{stroke-width:8}}
+.eye-mode .fill-box svg{height:min(44vh,360px)}
 </style>
 </head>
 <body>
@@ -735,7 +749,7 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
   <div class="eye-steps"><span data-s="cam">📷 開啟鏡頭</span><span data-s="model">🧠 載入眼睛追蹤</span><span data-s="face">🙂 找到你的臉</span><span data-s="cal">⭐ 眼睛校正</span></div>
   <p class="muted" id="boot-help" style="font-size:17px"></p>
 </div>
-<div class="eye-layer" id="eye-cal"><div id="cal-text"><h1>看著星星 ⭐</h1><p>星星跑到哪裡，眼睛就看哪裡</p></div><div id="cal-star">⭐</div></div>
+<div class="eye-layer" id="eye-cal"><div id="cal-text"><h1>看著星星 ⭐</h1><p>頭不要動，只用眼睛看</p></div><div id="cal-star">⭐</div></div>
 <div class="eye-banner" id="eye-noface" hidden>🙂 看不到你的臉，請面向鏡頭，坐近一點</div>
 <div class="eye-banner" id="eye-mute" hidden>🔇 瀏覽器擋住了聲音：請家人點一下畫面任何地方（只要一次）</div>
 <div id="gz-ring"></div>
@@ -2381,6 +2395,7 @@ const SIM_GLARE = /[?&]glare=1/.test(location.search);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 document.body.classList.add('eye-mode');
 S.set.eye = Object.assign({ dwell: 1.8, mode: 'auto', cursor: true, cam: true, steady: false }, S.set.eye || {});
+S.set.eye.mode = 'auto';
 S.set.capture = false; S.set.voiceRec = false; S.set.tips = false;
 const EYE = { x: innerWidth / 2, y: innerHeight / 2, face: false, lastFace: 0, ready: false, model: null, samples: [], collect: null, recent: [], mouse: { x: innerWidth / 2, y: innerHeight / 2 }, err: null };
 addEventListener('mousemove', e => { EYE.mouse = { x: e.clientX, y: e.clientY }; });
@@ -2538,7 +2553,7 @@ function simLoop() {
     if (window.__noface) return onFrame(null);
     const g = window.__gaze || EYE.mouse, u = g.x / innerWidth - .5, v = g.y / innerHeight - .5, n = s => (Math.random() - .5) * s;
     const g2 = SIM_GLARE ? 40 : 1;  // ?glare=1：模擬眼鏡反光（眼睛特徵很亂）
-    onFrame({ ix: .22 * u + n(.01 * g2), iy: .14 * v + n(.01 * g2), yaw: .25 * u + .02 * u * u + n(.004), pitch: .18 * v + n(.004), tx: n(.002), ty: n(.002), bx: .6 * u + n(.02 * g2), by: -.5 * v + n(.02 * g2), size: .32, blink: 0 });
+    onFrame({ ix: .22 * u + n(.02 * g2), iy: .05 * v + n(.03 * g2), yaw: n(.006), pitch: n(.006), tx: n(.002), ty: n(.002), bx: .6 * u + n(.06 * g2), by: -.2 * v + n(.08 * g2), size: .32, blink: 0 });
   }, 33);
 }
 
@@ -2569,13 +2584,13 @@ async function positionCheck() {
 }
 
 /* ---------- 校正：星星跑 9 個位置，孩子只要看著 ---------- */
-const CAL_PTS = [[.5, .5], [.08, .1], [.5, .08], [.92, .1], [.92, .5], [.92, .9], [.5, .92], [.08, .9], [.08, .5]];
+const CAL_PTS = [[.5, .5], [.08, .1], [.5, .08], [.92, .1], [.92, .5], [.92, .9], [.5, .92], [.08, .9], [.08, .5], [.29, .5], [.71, .5]];
 async function calibrate(again = false) {
   EYE.ready = false; EYE.model = null; FX.x = FY.x = null; EYE.bias = [0, 0];
   await positionCheck();
   const lay = $('#eye-cal'), star = $('#cal-star'); lay.classList.add('on'); $('#cal-text').hidden = false;
   star.style.transform = `translate(${innerWidth / 2}px,${innerHeight / 2}px)`;
-  await Promise.race([talk(again ? '我們再看一次星星。頭不要動，只用眼睛看。' : '眼睛看著星星。星星跑到哪裡，眼睛就看哪裡！', 'happy'), wait(9000)]);
+  await Promise.race([talk(again ? '我們再看一次星星。頭不要動，只用眼睛看。' : '頭不要動，只用眼睛看著星星。星星跑到哪裡，眼睛就看哪裡！', 'happy'), wait(9000)]);
   $('#cal-text').hidden = true;
   EYE.samples = [];
   for (const [k, [px, py]] of CAL_PTS.entries()) {
@@ -2598,8 +2613,8 @@ function calResult() {
   return new Promise(res => {
     const sc = calScore(), lv = sc >= 75 ? '很準 😄' : sc >= 50 ? '可以 🙂' : '不太準 😕';
     $('#calres-score').textContent = `${sc} 分　${lv}`;
-    $('#calres-mode').textContent = `追蹤方式：${EYE.model.mode === 'eye' ? '眼睛＋頭' : '只用頭'}`;
-    $('#calres-tip').textContent = sc >= 75 ? '' : '小提醒：臉正對鏡頭、光線從前面照、鏡頭和眼睛一樣高、校正時頭不要動。也可以在「眼睛設定」改成「只用頭」。';
+    $('#calres-mode').textContent = '';
+    $('#calres-tip').textContent = sc >= 75 ? '' : '小提醒：頭靠好不要動、臉正對鏡頭、光線從前面照；筆電螢幕往後仰一點或把筆電墊高，讓鏡頭和眼睛一樣高；眼鏡擦乾淨。';
     openOv('ov-calres');
     talk(sc >= 50 ? `校正好了，${sc}分！看著「開始玩」就可以開始。` : `校正只有${sc}分，不太準。可以看著「再校正一次」，或請家人調整位置。`, 'happy');
     let done = false; const fin = v => { if (done) return; done = true; closeOv('ov-calres'); res(v); };
@@ -2615,9 +2630,9 @@ function gazeLayer() { const ovs = [...document.querySelectorAll('.ov.on')]; ret
 function gazeTargets() {
   const L = gazeLayer(); if (!L) return [];
   return [...L.querySelectorAll('button,[data-gaze]')].filter(n => {
-    if (n.disabled || n.closest('[hidden],.busy,[data-nogaze]')) return false;
+    if (n.disabled || n.classList.contains('found') || n.closest('[hidden],.busy,[data-nogaze]')) return false;   // 用過的（找到的、送走的）不再當目標
     const r = n.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return false;
-    const cs = getComputedStyle(n); return cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' && (+cs.opacity > .25 || n.getAnimations().length > 0);
+    const cs = getComputedStyle(n); return cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' && (+cs.opacity > .25 || n.getAnimations().some(x => x.playState === 'running'));   // 淡出完的看不見，不算
   });
 }
 // 「一定要看準」的按鈕（回首頁、設定、換人、再聽一次）：眼神要在按鈕上才算
@@ -2635,10 +2650,12 @@ function gazeTick(now) {
   if (blocked || noFace || now < COOL) { setFocus(null); ring.style.display = 'none'; return; }
   if (now - TG_T > 120) { TG = gazeTargets(); TG_T = now; }
   const loose = TG.filter(n => !n.matches(TIGHT)), few = loose.length <= 4;
+  const ys = loose.map(n => { const r = n.getBoundingClientRect(); return r.top + r.height / 2; });
+  const VW = loose.length > 1 && Math.max(...ys) - Math.min(...ys) < innerHeight * .2 ? 0 : .5;
   let best = null, bd = 1e9, ba = 1e12;
   for (const n of TG) {
-    const r = n.getBoundingClientRect(), dx = Math.max(r.left - EYE.x, 0, EYE.x - r.right), dy = Math.max(r.top - EYE.y, 0, EYE.y - r.bottom), d = Math.hypot(dx, dy), a = r.width * r.height;
-    if (n.matches(TIGHT) && d > 24) continue;
+    const tight = n.matches(TIGHT), r = n.getBoundingClientRect(), dx = Math.max(r.left - EYE.x, 0, EYE.x - r.right), dy = Math.max(r.top - EYE.y, 0, EYE.y - r.bottom), d = Math.hypot(dx, dy * (tight ? 1 : VW)), a = r.width * r.height;
+    if (tight && d > 24) continue;
     if (d < bd || (d === bd && a < ba)) { bd = d; ba = a; best = n; }
   }
   // 選項不多時，看大概的方向就會選最近的那一個；選項多時要看近一點
@@ -2695,20 +2712,25 @@ function renderNew() {
   openOv('ov-eyenew');
   later0(() => talk('你幾歲呢？用眼睛看著答案。'), 300);
 }
+let HOME_PAGE = 0;
 function goHome() {
   stopGame();
   const p = cur(); if (!p) return renderWho();
   $('#h-av').textContent = p.av; $('#h-name').textContent = p.name; $('#h-stars').textContent = p.stars;
-  $('#h-mascot').innerHTML = mascot(110, 'normal');
+  $('#h-mascot').innerHTML = mascot(100, 'normal');
   $('#h-say').textContent = '今天想玩什麼？用眼睛看著它';
-  const tiles = $('#tiles'); tiles.innerHTML = '';
-  Object.entries(D).forEach(([k, d], i) => {
+  const tiles = $('#tiles'); tiles.innerHTML = ''; tiles.classList.add('one-row');
+  const all = Object.entries(D), page = all.slice(HOME_PAGE * 3, HOME_PAGE * 3 + 3);
+  page.forEach(([k, d], i) => {
     const t = el(`<button class="tile" style="--c:${d.color};--cs:var(--${k}-s);animation-delay:${i * 60}ms"><div class="ico">${d.icon}</div><span>${d.title[p.age]}</span><small>${d.name}</small></button>`);
     t.onclick = () => startGame(k);
     tiles.appendChild(t);
   });
+  const nx = el(`<button class="tile next-tile" style="--c:var(--soft);--cs:var(--card)"><div class="ico">➡️</div><span>下一頁</span><small>${HOME_PAGE + 1} / 2</small></button>`);
+  nx.onclick = () => { HOME_PAGE = (HOME_PAGE + 1) % 2; goHome(); };
+  tiles.appendChild(nx);
   if (!$('#eye-bar')) {
-    tiles.insertAdjacentHTML('afterend', `<div class="eye-bar" id="eye-bar"><button class="btn" id="eye-btn-set" data-dwell="1.3" style="--dc:var(--soc);--dcs:var(--soc-s)">👀 眼睛設定</button><button class="btn" id="eye-btn-cal" data-dwell="1.3" style="--dc:var(--emo);--dcs:var(--emo-s)">⭐ 重新校正</button></div>`);
+    tiles.insertAdjacentHTML('afterend', `<div class="eye-bar" id="eye-bar"><button class="btn" id="eye-btn-set" data-nogaze style="--dc:var(--soc);--dcs:var(--soc-s)">👀 眼睛設定（家長）</button><button class="btn" id="eye-btn-cal" data-nogaze style="--dc:var(--emo);--dcs:var(--emo-s)">⭐ 重新校正（家長）</button></div>`);
     $('#eye-btn-set').onclick = openEyeSet;
     $('#eye-btn-cal').onclick = async () => { await calibrate(); goHome(); };
   }
@@ -2718,12 +2740,11 @@ function openEyeSet() {
   const E = S.set.eye, box = $('#eye-set');
   const row = (title, key, opts) => `<div class="row"><b>${title}</b>${opts.map(([v, t]) => `<button class="btn ${E[key] === v ? 'sel' : ''}" data-k="${key}" data-v="${v}">${t}</button>`).join('')}</div>`;
   box.innerHTML = row('看多久才選取', 'dwell', [[1.2, '快 1.2 秒'], [1.8, '標準 1.8 秒'], [2.5, '慢 2.5 秒']])
-    + row('追蹤方式', 'mode', [['auto', '自動'], ['eye', '眼睛＋頭'], ['head', '只用頭']])
     + row('穩定度', 'steady', [[false, '一般'], [true, '加強（頭或眼睛會晃）']])
     + row('注視點', 'cursor', [[true, '顯示'], [false, '隱藏']])
     + row('鏡頭小視窗', 'cam', [[true, '顯示'], [false, '隱藏']])
     + `<div class="row"><button class="btn" id="eye-set-cal" style="--dc:var(--emo);--dcs:var(--emo-s)">⭐ 重新校正</button><button class="btn" id="eye-set-ok" style="--dc:var(--move);--dcs:var(--move-s)">完成</button></div>`
-    + `<p class="muted" style="text-align:center">目前：${EYE.model ? (EYE.model.mode === 'eye' ? '眼睛＋頭' : '只用頭') : '尚未校正'}${EYE.err != null ? `，準確度約 ${Math.round((1 - Math.min(1, EYE.err)) * 100)} 分` : ''}</p>`;
+    + `<p class="muted" style="text-align:center">${EYE.model ? `目前校正分數：${calScore()} 分` : '尚未校正'}</p>`;
   box.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
     const k = b.dataset.k, raw = b.dataset.v, v = raw === 'true' ? true : raw === 'false' ? false : isNaN(+raw) ? raw : +raw;
     E[k] = v; save();
@@ -2775,7 +2796,7 @@ GAMES['cog2-3'] = dom => rounds(dom, 5, async (i, lv) => {
 // 認知 3–4：眼睛一個一個看，看到的就亮起來、豆豆數出來，再選數字
 GAMES['cog3-4'] = dom => rounds(dom, 5, async (i, lv) => {
   const { n, t } = fresh(() => { const [a, b] = lvl(lv, [[2, 3], [3, 4], [4, 5], [5, 6]]), n = a + rnd(b - a + 1), t = pick(THINGS); return { n, t, key: t.e + n }; });
-  const wrap = body(`<div class="scene meadow eye-count" style="min-height:min(40vh,340px)"><div class="hill"></div><div class="count-box"></div></div><div class="q-opts"></div>`);
+  const wrap = body(`<div class="scene meadow eye-count one-line" style="min-height:min(40vh,340px)"><div class="hill"></div><div class="count-box"></div></div><div class="q-opts"></div>`);
   const sc = wrap.querySelector('.scene'), box = wrap.querySelector('.count-box'), opts = wrap.querySelector('.q-opts');
   let c = 0;
   const counted = new Promise(res => {
@@ -2838,9 +2859,9 @@ GAMES['lang2-3'] = dom => rounds(dom, 5, async (i, lv) => {
 });
 // 語文 3–4：眼睛翻翻牌（看著牌就翻開，找出一樣的叫聲）
 GAMES['lang3-4'] = dom => rounds(dom, 3, async (i, lv, k) => {
-  const pairs = lvl(lv, [[2, 2, 2], [2, 3, 3], [3, 3, 3]])[k];
+  const pairs = lvl(lv, [[2, 2, 2], [2, 3, 3], [3, 3, 3]])[k];  // 一排最多 6 張
   const { an } = fresh(() => { const an = sample(ANI, pairs); return { an, key: an.map(a => a.k).sort().join() }; });
-  const deck = shuffle([...an, ...an]), cols = deck.length <= 4 ? 2 : 3;
+  const deck = shuffle([...an, ...an]), cols = deck.length;
   const wrap = body(`<div class="scene sky" style="min-height:auto;padding:16px 8px"><div class="cards" style="grid-template-columns:repeat(${cols},auto)"></div></div>`);
   const grid = wrap.querySelector('.cards');
   let open = [], matched = 0, busy = false;
@@ -2874,15 +2895,15 @@ GAMES['lang4-6'] = dom => rounds(dom, 5, async (i, lv) => {
 });
 // 情緒 2–3、3–4、4–6：沿用原本的玩法（都是點選），眼睛看著就能選；道具加大
 // 身體動作（眼睛體操）2–3：豆豆躲貓貓
-const PEEK = [[.16, .22], [.5, .2], [.84, .22], [.16, .5], [.84, .5], [.16, .78], [.5, .78], [.84, .78]];
+const PEEK = [.12, .37, .63, .88];
 GAMES['move2-3'] = dom => rounds(dom, 4, async (i, lv) => {
-  const len = lvl(lv, [3, 3, 4, 5]), { seq } = fresh(() => { const seq = sample([0, 1, 2, 3, 4, 5, 6, 7], len); return { seq, key: seq.join('') }; });
-  const wrap = body(`<div class="peek-field"></div>`), field = wrap.querySelector('.peek-field');
+  const len = lvl(lv, [3, 4, 5, 6]);
+  const { seq } = fresh(() => { const seq = []; while (seq.length < len) { const k = rnd(4); if (k !== seq[seq.length - 1]) seq.push(k); } return { seq, key: seq.join('') }; });
+  const wrap = body(`<div class="peek-field" style="height:min(46vh,380px)"></div>`), field = wrap.querySelector('.peek-field');
   await prompt(i === 0 ? '豆豆躲起來了！看到豆豆，就用眼睛看著他！' : '豆豆又要躲起來了，找找看！', 'happy'); setQ(`躲貓貓 ${seq.length} 次`);
   for (let k = 0; k < seq.length; k++) {
-    const [px, py] = PEEK[seq[k]];
     await new Promise(res => {
-      const b = el(`<button class="peek" data-dwell=".8" style="left:${px * 100}%;top:${py * 100}%">${mascot(120, 'surprised')}</button>`);
+      const b = el(`<button class="peek" data-dwell=".8" style="left:${PEEK[seq[k]] * 100}%;top:50%">${mascot(120, 'surprised')}</button>`);
       b.onclick = () => { b.onclick = null; b.innerHTML = mascot(120, 'happy'); burst(b, 12, ['💛', '✨']); talk(pick(['找到了！', '被你找到了！', '哇，好厲害！']), 'happy'); later(() => { b.remove(); res(); }, 1300); };
       field.appendChild(b);
     });
@@ -2892,11 +2913,13 @@ GAMES['move2-3'] = dom => rounds(dom, 4, async (i, lv) => {
 // 身體動作（眼睛體操）3–4：星星追追追（眼睛跟著移動的東西走）
 const CHASE_T = [{ e: '⭐', n: '星星' }, { e: '🐝', n: '蜜蜂' }, { e: '🦋', n: '蝴蝶' }, { e: '🎈', n: '氣球' }, { e: '🐟', n: '小魚' }, { e: '🚀', n: '火箭' }, { e: '🐞', n: '瓢蟲' }, { e: '🐤', n: '小鳥' }];
 const C2 = Math.PI * 2, ease = t => .5 - .5 * Math.cos(t * C2);
-const CHASE_P = { lr: t => [.08 + .84 * ease(t), .5], ud: t => [.5, .1 + .8 * ease(t)], circle: t => [.5 + .33 * Math.cos(t * C2), .5 + .33 * Math.sin(t * C2)], zig: t => [.08 + .84 * ease(t / 2), .5 + .3 * Math.sin(t * C2 * 1.5)], eight: t => [.5 + .36 * Math.sin(t * C2), .5 + .28 * Math.sin(t * C2 * 2)], diag: t => [.1 + .8 * ease(t), .12 + .76 * ease(t)] };
+// 只左右移動（頭不動時眼睛左右追視最可靠）
+const stepE = t => { const k = Math.floor(t * 4) / 4, f = Math.min(1, (t * 4 - Math.floor(t * 4)) * 2); return ease(k / 2 + f / 8); };
+const CHASE_P = { lr: t => [.08 + .84 * ease(t / 2), .5], rl: t => [.92 - .84 * ease(t / 2), .5], back: t => [.08 + .84 * ease(t), .5], wave: t => [.08 + .84 * ease(t), .5 + .05 * Math.sin(t * C2 * 3)], stop: t => [.08 + .84 * stepE(t), .5] };
 GAMES['move3-4'] = dom => rounds(dom, 4, async (i, lv) => {
-  const { t, path, slow } = fresh(() => { const t = pick(CHASE_T), path = pick(lv === 0 ? ['lr', 'ud'] : Object.keys(CHASE_P)), slow = lv < 2 || Math.random() < .5; return { t, path, slow, key: t.e + path + slow }; });
+  const { t, path, slow } = fresh(() => { const t = pick(CHASE_T), path = pick(lv === 0 ? ['lr', 'rl'] : Object.keys(CHASE_P)), slow = lv < 2 || Math.random() < .5; return { t, path, slow, key: t.e + path + slow }; });
   const T = lvl(lv, [9, 10, 11, 12]) * 1000, loops = slow ? 1 : 1.5;
-  const wrap = body(`<div class="peek-field" style="height:min(60vh,520px)"><span class="chase">${t.e}</span></div><div class="chase-bar"><i></i></div>`);
+  const wrap = body(`<div class="peek-field" style="height:min(40vh,320px)"><span class="chase">${t.e}</span></div><div class="chase-bar"><i></i></div>`);
   const field = wrap.querySelector('.peek-field'), star = wrap.querySelector('.chase'), bar = wrap.querySelector('.chase-bar i');
   const place = u => { const [px, py] = CHASE_P[path](u), r = field.getBoundingClientRect(); star.style.transform = `translate(${px * r.width}px,${py * r.height}px)`; return [r.left + px * r.width, r.top + py * r.height]; };
   place(0);
@@ -2904,7 +2927,7 @@ GAMES['move3-4'] = dom => rounds(dom, 4, async (i, lv) => {
   let follow = 0, t0 = performance.now(), last = t0;
   await new Promise(res => { const iv = every(() => {
     const now = performance.now(), el2 = now - t0, [sx, sy] = place(Math.min(1, el2 / T) * loops);
-    if (EYE.face && Math.hypot(EYE.x - sx, EYE.y - sy) < Math.max(120, .16 * Math.min(innerWidth, innerHeight))) follow += now - last;
+    if (EYE.face && Math.abs(EYE.x - sx) < Math.max(130, .14 * innerWidth)) follow += now - last;
     last = now; bar.style.width = Math.min(100, follow / (T * .55) * 100) + '%';
     if (el2 >= T) { clearInterval(iv); res(); }
   }, 40); });
@@ -2916,8 +2939,7 @@ const CMD_OBJ = [{ e: '🌞', n: '太陽' }, { e: '🌼', n: '花' }, { e: '🐶
 const ORD = ['先', '再', '然後', '最後'];
 GAMES['move4-6'] = dom => rounds(dom, 4, async (i, lv) => {
   const len = lvl(lv, [2, 2, 3, 4]), { objs, seq } = fresh(() => { const objs = sample(CMD_OBJ, 4), seq = sample([0, 1, 2, 3], len); return { objs, seq, key: seq.map(k => objs[k].e).join('') }; });
-  const pos = ['l', 'u', 'r', 'd'];
-  const wrap = body(`<div class="cmd-field">${objs.map((o, k) => `<button class="cmd cmd-${pos[k]}" data-dwell=".9">${o.e}</button>`).join('')}<div class="cmd cmd-c" style="border:0;background:none">${mascot(110, 'happy')}</div></div>`);
+  const wrap = body(`<div class="cmd-row">${objs.map(o => `<button class="cmd" data-dwell=".9">${o.e}</button>`).join('')}</div>`);
   const bs = [...wrap.querySelectorAll('button.cmd')];
   const say = seq.map((k, j) => `${len > 2 && j === len - 1 ? '最後' : ORD[j]}看${objs[k].n}`).join('，');
   bs.forEach(b => b.disabled = true);
@@ -3087,23 +3109,23 @@ const FILL_TPL = [
 const PALS = ['#FF5C5C', '#FF9F43', '#FFD233', '#2FBF84', '#4F8DFD', '#A06BFF', '#FF7EB6', '#A0704F'];
 GAMES['art4-6'] = dom => rounds(dom, 3, async (i, lv) => {
   const { tp, pal } = fresh(() => { const tp = pick(FILL_TPL), pal = sample(PALS, 3); return { tp, pal, key: tp.k + pal.join('') }; });
-  const wrap = body(`<div class="fill-box"><div class="palette">${pal.map((c, k) => `<button data-dwell=".8" style="background:${c}" class="${k ? '' : 'sel'}" aria-label="顏色"></button>`).join('')}</div><svg viewBox="0 0 200 150">${tp.s}</svg></div>`);
-  const svg = wrap.querySelector('svg'), pals = [...wrap.querySelectorAll('.palette button')], regions = [...svg.querySelectorAll('[data-gaze]')];
-  regions.forEach(r => { r.setAttribute('fill', '#FFFFFF'); r.dataset.dwell = '.9'; r.querySelectorAll('*').forEach(c => c.setAttribute('fill', 'inherit')); });
-  let color = pal[0];
-  pals.forEach((b, k) => b.onclick = () => { color = pal[k]; pals.forEach(x => x.classList.toggle('sel', x === b)); talk('換顏色了！'); });
-  await prompt(`來塗${tp.n}！先看左邊的顏色，再看要塗的地方，就會塗上去。全部塗滿就完成了！`, 'happy'); setQ(`眼睛塗顏色：${tp.n}`);
-  await new Promise(res => regions.forEach(r => r.addEventListener('click', () => {
-    r.setAttribute('fill', color); r.dataset.done = 1; burst(r, 6);
-    if (regions.every(x => x.dataset.done)) later(res, 600);
-  })));
-  try { const p = cur(), art = getArt(p.id); art.unshift({ d: today(), img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150" style="background:#fff">${svg.innerHTML.replace(/ data-[a-z]+="[^"]*"/g, '').replace(/ class="[^"]*"/g, '')}</svg>`) }); setArt(p.id, art.slice(0, 12)); } catch (e) {}
+  const wrap = body(`<div class="fill-box"><svg viewBox="0 0 200 150">${tp.s}</svg></div><div class="q-opts"></div>`);
+  const svg = wrap.querySelector('svg'), box = wrap.querySelector('.q-opts'), regions = [...svg.querySelectorAll('[data-gaze]')];
+  regions.forEach(r => { r.removeAttribute('data-gaze'); r.setAttribute('fill', '#FFFFFF'); r.querySelectorAll('*').forEach(c => c.setAttribute('fill', 'inherit')); });
+  setQ(`眼睛塗顏色：${tp.n}`);
+  for (let k = 0; k < regions.length; k++) {
+    const r = regions[k]; r.classList.add('now-fill');
+    if (k === 0) await prompt(`來塗${tp.n}！虛線圈起來的地方要塗什麼顏色？用眼睛看著顏色！`, 'happy'); else await prompt('這裡要塗什麼顏色？');
+    const o = await choose(box, pal.map(c => ({ html: `<span class="swatch" style="background:${c}"></span>`, ok: true, say: pick(['好漂亮！', '塗好了！', '這個顏色好看！']), c })), { wait: 900 });
+    r.classList.remove('now-fill'); r.setAttribute('fill', o.c); box.innerHTML = '';
+  }
+  try { const p = cur(), art = getArt(p.id); art.unshift({ d: today(), img: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150" style="background:#fff">${svg.innerHTML.replace(/ class="[^"]*"/g, '')}</svg>`) }); setArt(p.id, art.slice(0, 12)); } catch (e) {}
   burst(svg, 14, ['🎨', '✨']); await praise(`${tp.n}塗好了，好漂亮！`); await sleep(700); wrap.remove();
 });
 Object.assign(TIPS.cog, { '2-3': '孩子看著選項約 2 秒就會選取，看到圓圈慢慢填滿就對了。', '3-4': '一個一個看，看到的會亮起來並數出來。', '4-6': '請孩子先說出規律，再用眼睛選。' });
 Object.assign(TIPS.move, { '2-3': '豆豆會出現在畫面不同位置，練習眼睛快速找目標。', '3-4': '練習眼睛平順追視，跟丟也沒關係。', '4-6': '練習聽指令、記順序，再依序看。' });
 Object.assign(TIPS.soc, { '2-3': '和豆豆輪流：等豆豆戳完再換你。', '3-4': '看著好朋友就把點心送過去，要一樣多。', '4-6': '你戳自己的顏色，豆豆戳他的顏色，一起完成。' });
-Object.assign(TIPS.art, { '2-3': '看到哪裡就畫到哪裡，12 秒後可以看「完成」。', '3-4': '依照數字順序看星星。', '4-6': '先看顏色，再看要塗的地方。' });
+Object.assign(TIPS.art, { '2-3': '看到哪裡就畫到哪裡，12 秒後可以看「完成」。', '3-4': '依照數字順序看星星。', '4-6': '虛線圈起來的地方，看著一個顏色就塗上去。' });
 
 /* ---------- 啟動 ---------- */
 function bootStep(s, msg, help) {
@@ -3143,7 +3165,7 @@ $('#ov-help .help-sheet').innerHTML = `<button class="help-x" id="help-x" aria-l
   <section><h3>介紹</h3><p>給 2–6 歲、手不方便操作的小朋友（例如腦性麻痺、肢體障礙）使用的互動遊戲。不用手、不用滑鼠，透過鏡頭看眼睛和頭的方向來玩。依照《幼兒園教保活動課程大綱》六大領域設計，三個年齡各有不同玩法。</p></section>
   <section><h3>功能</h3><ul>
     <li>眼睛看著選項約 2 秒（圓圈填滿）就會選取，可調快慢</li>
-    <li>開始前看星星校正，會自動選「眼睛＋頭」或「只用頭」，戴眼鏡也能用</li>
+    <li>開始前頭不動、只用眼睛看星星校正，戴眼鏡也能用</li>
     <li>18 種遊戲，一關一關變難；每個單元約 15 分鐘、題目不重複；結束休息 3 分鐘</li>
     <li>豆豆念出所有說明，畫面同時有大字幕</li>
     <li>影像只在這台裝置上處理，不會上傳</li></ul></section>
@@ -3157,8 +3179,9 @@ $('#ov-help .help-sheet').innerHTML = `<button class="help-x" id="help-x" aria-l
     <li><b>鏡頭位置</b>：鏡頭在螢幕上方正中間，和眼睛差不多高；裝置用支架固定，玩的時候不要移動</li>
     <li><b>距離</b>：臉離鏡頭約 40–70 公分，臉在擺位框框中間</li>
     <li><b>光線</b>：光從前面照亮臉；不要背對窗戶，也不要只有頭頂一盞燈</li>
-    <li><b>眼鏡</b>：鏡片擦乾淨；有反光就把眼鏡稍微往下調，或在「眼睛設定」改成「只用頭」</li>
-    <li><b>擺位</b>：坐姿和頭部要有支撐（頭靠、側墊），校正和玩的時候姿勢一樣；換姿勢、換位置就要重新校正</li>
+    <li><b>眼鏡</b>：鏡片擦乾淨；有反光就調整燈光方向或把眼鏡稍微往下調</li>
+    <li><b>擺位</b>：頭部一定要有支撐（頭靠、側墊），整個過程頭不動、只用眼睛；換姿勢、換位置就要重新校正</li>
+    <li><b>筆電</b>：把筆電墊高或螢幕往後仰，讓鏡頭和眼睛一樣高；選項都排成一排，左右看就能選</li>
     <li><b>校正</b>：看星星時頭盡量不動、只用眼睛看；分數低於 50 分請再校正一次</li>
     <li><b>選取</b>：看著選項直到圓框繞完一圈；太快誤選就把「看多久才選取」調慢，頭或眼睛會晃就開「加強穩定」</li>
     <li><b>休息與安全</b>：每個單元約 15 分鐘，結束會休息 3 分鐘；孩子眼睛疲勞、流淚、頭痛或不舒服就停止。遊戲不使用閃光</li>
