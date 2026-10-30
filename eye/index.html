@@ -599,6 +599,14 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 .eye-set .row b{width:100%;text-align:center;font-size:18px}
 .eye-set .btn{min-width:120px}
 .eye-set .btn.sel{background:var(--dc);color:#fff}
+
+/* 擺位檢查：大大的鏡頭畫面＋臉的框框 */
+#eye-cam.big{left:50%;bottom:auto;top:54%;width:min(64vw,460px);height:min(48vw,345px);transform:translate(-50%,-50%) scaleX(-1);z-index:130;border-width:6px}
+#pos-oval{position:fixed;left:50%;top:54%;width:min(26vw,190px);height:min(34vw,250px);transform:translate(-50%,-50%);border:5px dashed #fff;border-radius:50%;z-index:131;pointer-events:none;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+#pos-msg{position:fixed;left:50%;bottom:6vh;transform:translateX(-50%);z-index:131;font-size:clamp(20px,3vw,28px);font-weight:900;background:#FFF0AE;color:#2F2A44;border:3px solid #946C00;border-radius:18px;padding:10px 20px;margin:0;max-width:92vw}
+#pos-msg.ok{background:#C8F0DC;border-color:#1F8559}
+#eye-boot.pos #boot-mascot,#eye-boot.pos h1,#eye-boot.pos .eye-steps,#eye-boot.pos #boot-help{display:none}
+#eye-boot.pos #boot-msg{position:fixed;top:5vh;left:50%;transform:translateX(-50%);font-size:clamp(22px,3.4vw,32px);font-weight:900}
 </style>
 </head>
 <body>
@@ -733,6 +741,7 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 <div id="gz-ring"></div>
 <div id="gz-cursor" class="off"></div>
 <video id="eye-cam" class="hide" playsinline muted></video>
+<div id="pos-oval" hidden></div><p id="pos-msg" hidden></p>
 
 <div class="ov" id="ov-eyenew"><div class="sheet" style="max-width:760px">
   <div id="eyenew-mascot"></div><h2>你幾歲呢？用眼睛看著答案</h2>
@@ -742,6 +751,11 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 <div class="ov" id="ov-eye"><div class="sheet" style="max-width:820px">
   <h2>👀 眼睛設定</h2>
   <div class="eye-set" id="eye-set"></div>
+</div></div>
+
+<div class="ov" id="ov-calres"><div class="sheet" style="max-width:820px">
+  <h2>校正結果</h2><p style="font-size:30px;font-weight:900;margin:0" id="calres-score"></p><p class="muted" id="calres-mode"></p><p class="muted" id="calres-tip" style="font-size:16px"></p>
+  <div class="q-opts"><button class="opt" id="calres-go" data-ok="1"><span class="emo">▶️</span><small>開始玩</small></button><button class="opt" id="calres-again"><span class="emo">⭐</span><small>再校正一次</small></button></div>
 </div></div>
 
 <script>
@@ -2363,6 +2377,7 @@ $('#p-back').onclick = goHome;
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
 const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const EYE_SIM = /[?&]sim=1/.test(location.search);
+const SIM_GLARE = /[?&]glare=1/.test(location.search);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 document.body.classList.add('eye-mode');
 S.set.eye = Object.assign({ dwell: 1.8, mode: 'auto', cursor: true, cam: true, steady: false }, S.set.eye || {});
@@ -2379,19 +2394,32 @@ const _play = HTMLMediaElement.prototype.play;
 HTMLMediaElement.prototype.play = function () { const p = _play.call(this); if (p && p.catch) p.catch(e => { if (e && e.name === 'NotAllowedError' && this.id !== 'eye-cam') audioBlocked(); }); return p; };
 addEventListener('pointerdown', () => { if (!MUTED) return; MUTED = false; $('#eye-mute').hidden = true; if (LAST_LINE) talk(LAST_LINE); }, true);
 
-/* ---------- 從臉部特徵點算出眼神特徵 ---------- */
-function eyeFeatures(L) {
+/* ---------- 眼神特徵：模型的眼球方向（blendshapes）＋精確的頭部角度（3D 轉換矩陣）＋瞳孔位置 ---------- */
+const BS = ['eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookInRight', 'eyeLookOutRight', 'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight', 'eyeBlinkLeft', 'eyeBlinkRight'];
+function eyeFeatures(L, bs, mat) {
   const P = i => L[i];
   const eye = (o, n, up, lo, ir) => { const a = P(o), b = P(n), w = Math.hypot(b.x - a.x, b.y - a.y) || 1e-3, r = P(ir); return [(r.x - (a.x + b.x) / 2) / w, (r.y - (P(up).y + P(lo).y) / 2) / w]; };
   const e1 = eye(33, 133, 159, 145, 468), e2 = eye(263, 362, 386, 374, 473);
   const l = P(234), r = P(454), top = P(10), chin = P(152), nose = P(1);
   const fw = Math.hypot(r.x - l.x, r.y - l.y) || 1e-3, fh = Math.hypot(chin.x - top.x, chin.y - top.y) || 1e-3;
-  return { ix: (e1[0] + e2[0]) / 2, iy: (e1[1] + e2[1]) / 2, yaw: (nose.x - (l.x + r.x) / 2) / fw, pitch: (nose.y - (top.y + chin.y) / 2) / fh, cx: (l.x + r.x) / 2, cy: (top.y + chin.y) / 2, size: fw };
+  const f = { ix: (e1[0] + e2[0]) / 2, iy: (e1[1] + e2[1]) / 2, yaw: (nose.x - (l.x + r.x) / 2) / fw, pitch: (nose.y - (top.y + chin.y) / 2) / fh, tx: (l.x + r.x) / 2 - .5, ty: (top.y + chin.y) / 2 - .5, size: fw, bx: 0, by: 0, blink: 0 };
+  if (mat && mat.data && mat.data.length >= 16) {
+    const m = mat.data; // 4×4，以欄為主：旋轉＋位移（公分）
+    f.yaw = Math.asin(Math.max(-1, Math.min(1, -m[2]))); f.pitch = Math.atan2(m[6], m[10]);
+    const tz = Math.abs(m[14]) || 50; f.tx = m[12] / tz; f.ty = m[13] / tz;
+  }
+  if (bs && bs.categories) {
+    const s = {}; bs.categories.forEach(c => { if (BS.includes(c.categoryName)) s[c.categoryName] = c.score; });
+    f.bx = ((s.eyeLookOutLeft || 0) - (s.eyeLookInLeft || 0) + (s.eyeLookInRight || 0) - (s.eyeLookOutRight || 0)) / 2;
+    f.by = ((s.eyeLookUpLeft || 0) + (s.eyeLookUpRight || 0) - (s.eyeLookDownLeft || 0) - (s.eyeLookDownRight || 0)) / 2;
+    f.blink = Math.max(s.eyeBlinkLeft || 0, s.eyeBlinkRight || 0);
+  }
+  return f;
 }
-// 兩種模型：眼睛＋頭（較準），只用頭（戴眼鏡反光、眼睛特徵不穩時較可靠）
+// 兩種模型：眼睛＋頭（比較準），只用頭（眼鏡反光、眼睛特徵不穩時比較可靠）；特徵少一點，避免只記住校正點
 const FEATS = {
-  eye: f => [f.ix, f.iy, f.yaw, f.pitch, f.cx, f.cy, f.ix * f.ix, f.iy * f.iy, f.ix * f.iy, f.yaw * f.pitch],
-  head: f => [f.yaw, f.pitch, f.cx, f.cy, f.yaw * f.yaw, f.pitch * f.pitch, f.yaw * f.pitch],
+  eye: f => [f.yaw, f.pitch, f.tx, f.ty, f.bx, f.by, f.ix, f.iy, f.yaw * f.yaw, f.pitch * f.pitch],
+  head: f => [f.yaw, f.pitch, f.tx, f.ty, f.yaw * f.yaw, f.pitch * f.pitch, f.yaw * f.pitch],
 };
 function solve(A, b) {
   const n = b.length; A = A.map((r, i) => [...r, b[i]]);
@@ -2402,7 +2430,7 @@ function solve(A, b) {
   }
   return A.map((r, i) => r[n] / (r[i] || 1e-9));
 }
-function fitModel(samples, mode, lam = .05) {
+function fitRaw(samples, mode, lam) {
   const rows = samples.map(s => FEATS[mode](s.f)), m = rows[0].length;
   const mu = Array.from({ length: m }, (_, j) => rows.reduce((a, r) => a + r[j], 0) / rows.length);
   const sd = mu.map((u, j) => Math.sqrt(rows.reduce((a, r) => a + (r[j] - u) ** 2, 0) / rows.length) || 1);
@@ -2410,11 +2438,17 @@ function fitModel(samples, mode, lam = .05) {
   const A = Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => Z.reduce((a, z) => a + z[i] * z[j], 0) + (i === j && i ? lam * rows.length : 0)));
   const bx = Array.from({ length: k }, (_, i) => Z.reduce((a, z, n) => a + z[i] * samples[n].tx, 0));
   const by = Array.from({ length: k }, (_, i) => Z.reduce((a, z, n) => a + z[i] * samples[n].ty, 0));
-  return { mode, mu, sd, wx: solve(A, bx), wy: solve(A.map(r => r.slice()), by) };
+  return { mode, mu, sd, wx: solve(A, bx), wy: solve(A.map(r => r.slice()), by), sx: [1, 0], sy: [1, 0] };
 }
-function predict(M, f) {
-  const z = [1, ...FEATS[M.mode](f).map((v, j) => (v - M.mu[j]) / M.sd[j])];
-  return [z.reduce((a, v, i) => a + v * M.wx[i], 0), z.reduce((a, v, i) => a + v * M.wy[i], 0)];
+const rawPredict = (M, f) => { const z = [1, ...FEATS[M.mode](f).map((v, j) => (v - M.mu[j]) / M.sd[j])]; return [z.reduce((a, v, i) => a + v * M.wx[i], 0), z.reduce((a, v, i) => a + v * M.wy[i], 0)]; };
+function predict(M, f) { const [x, y] = rawPredict(M, f); return [M.sx[0] * x + M.sx[1], M.sy[0] * y + M.sy[1]]; }
+// 去縮小：迴歸會把預測點往中間拉（看邊邊時點不到邊邊），用校正點把範圍拉回來
+const lin = (xs, ys) => { const n = xs.length, mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n, v = xs.reduce((a, x) => a + (x - mx) ** 2, 0); const a = v > 1e-9 ? xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / v : 1; return [Math.max(.8, Math.min(2.2, a)), my - Math.max(.8, Math.min(2.2, a)) * mx]; };
+function fitModel(samples, mode, lam = .15) {
+  const M = fitRaw(samples, mode, lam), pts = [...new Set(samples.map(s => s.k))];
+  const P = pts.map(k => { const ss = samples.filter(s => s.k === k), p = ss.map(s => rawPredict(M, s.f)); return { tx: ss[0].tx, ty: ss[0].ty, px: p.reduce((a, q) => a + q[0], 0) / p.length, py: p.reduce((a, q) => a + q[1], 0) / p.length }; });
+  M.sx = lin(P.map(p => p.px), P.map(p => p.tx)); M.sy = lin(P.map(p => p.py), P.map(p => p.ty));
+  return M;
 }
 // 留一點驗證：拿掉一個校正點來訓練，再預測那一點，算平均誤差（畫面對角線的比例）
 function lopoError(samples, mode) {
@@ -2428,17 +2462,26 @@ function lopoError(samples, mode) {
   return sum / pts.length / Math.hypot(innerWidth, innerHeight);
 }
 function chooseModel() {
-  const s = EYE.samples; if (s.length < 40) return false;
+  const s = EYE.samples; if (s.length < 40 || new Set(s.map(x => x.k)).size < 6) return false;
   const errs = { eye: lopoError(s, 'eye'), head: lopoError(s, 'head') };
-  const mode = S.set.eye.mode === 'auto' ? (errs.eye <= errs.head * 1.05 ? 'eye' : 'head') : S.set.eye.mode;
-  EYE.model = fitModel(s, mode); EYE.err = errs[mode]; EYE.errs = errs; EYE.ready = true;
+  const mode = S.set.eye.mode === 'auto' ? (errs.eye <= errs.head * 1.08 ? 'eye' : 'head') : S.set.eye.mode;
+  EYE.model = fitModel(s, mode); EYE.err = errs[mode]; EYE.errs = errs; EYE.ready = true; EYE.bias = [0, 0];
   return true;
+}
+// 每個校正點去掉眨眼、突然晃動的畫面（取中位數附近的樣本）
+function robust(ss) {
+  if (ss.length < 6) return ss;
+  const med = k => { const v = ss.map(s => s.f[k]).sort((a, b) => a - b); return v[v.length >> 1]; };
+  const keys = ['yaw', 'pitch', 'bx', 'by'], m = Object.fromEntries(keys.map(k => [k, med(k)]));
+  const mad = Object.fromEntries(keys.map(k => { const v = ss.map(s => Math.abs(s.f[k] - m[k])).sort((a, b) => a - b); return [k, v[v.length >> 1] || 1e-4]; }));
+  const keep = ss.filter(s => keys.every(k => Math.abs(s.f[k] - m[k]) <= 3 * mad[k]));
+  return keep.length >= ss.length * .5 ? keep : ss;
 }
 // 平滑（One Euro 濾波）：看著不動時很穩，眼睛移動時跟得上；「加強穩定」給頭部或眼睛會不自主晃動的孩子
 class OneEuro {
   constructor() { this.x = null; this.dx = 0; this.t = 0; }
   f(x, t) {
-    const [minC, beta] = S.set.eye.steady ? [.25, .0012] : [.6, .004];
+    const [minC, beta] = S.set.eye.steady ? [.25, .0012] : [.5, .003];
     if (this.x === null) { this.x = x; this.t = t; return x; }
     const dt = Math.max(1e-3, (t - this.t) / 1000); this.t = t;
     const a = c => 1 / (1 + 1 / (2 * Math.PI * c * dt));
@@ -2447,18 +2490,20 @@ class OneEuro {
   }
 }
 const FX = new OneEuro(), FY = new OneEuro();
+EYE.bias = [0, 0];
 function onFrame(f) {
   const now = performance.now();
   EYE.face = !!f; $('#eye-cam').classList.toggle('face', !!f);
   if (!f) return;
-  EYE.lastFace = now;
-  EYE.recent.push(f); if (EYE.recent.length > 3) EYE.recent.shift();
+  EYE.lastFace = now; EYE.last = f;
+  if (f.blink > .55) return;               // 眨眼的畫面不用
+  EYE.recent.push(f); if (EYE.recent.length > 4) EYE.recent.shift();
   const avg = {}; for (const k in f) avg[k] = EYE.recent.reduce((a, r) => a + r[k], 0) / EYE.recent.length;
   if (EYE.collect) EYE.collect(avg);
   if (!EYE.model) return;
   const [px, py] = predict(EYE.model, avg);
-  EYE.x = Math.max(0, Math.min(innerWidth, FX.f(px * innerWidth, now)));
-  EYE.y = Math.max(0, Math.min(innerHeight, FY.f(py * innerHeight, now)));
+  EYE.x = Math.max(0, Math.min(innerWidth, FX.f((px + EYE.bias[0]) * innerWidth, now)));
+  EYE.y = Math.max(0, Math.min(innerHeight, FY.f((py + EYE.bias[1]) * innerHeight, now)));
 }
 
 /* ---------- 鏡頭與追蹤模型 ---------- */
@@ -2470,7 +2515,7 @@ async function startCamera() {
 async function loadTracker() {
   const { FaceLandmarker, FilesetResolver } = await import(MP + '/vision_bundle.mjs');
   const fs = await FilesetResolver.forVisionTasks(MP + '/wasm');
-  const opt = d => ({ baseOptions: { modelAssetPath: MP_MODEL, delegate: d }, runningMode: 'VIDEO', numFaces: 1 });
+  const opt = d => ({ baseOptions: { modelAssetPath: MP_MODEL, delegate: d }, runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true });
   try { FL = await FaceLandmarker.createFromOptions(fs, opt('GPU')); } catch (e) { FL = await FaceLandmarker.createFromOptions(fs, opt('CPU')); }
 }
 function trackLoop() {
@@ -2480,7 +2525,7 @@ function trackLoop() {
       if (v.readyState >= 2 && v.currentTime !== last) {
         last = v.currentTime;
         const r = FL.detectForVideo(v, performance.now()), L = r.faceLandmarks && r.faceLandmarks[0];
-        onFrame(L && L.length >= 478 ? eyeFeatures(L) : null);
+        onFrame(L && L.length >= 478 ? eyeFeatures(L, r.faceBlendshapes && r.faceBlendshapes[0], r.facialTransformationMatrixes && r.facialTransformationMatrixes[0]) : null);
       }
     } catch (e) {}
     requestAnimationFrame(step);
@@ -2492,40 +2537,76 @@ function simLoop() {
   setInterval(() => {
     if (window.__noface) return onFrame(null);
     const g = window.__gaze || EYE.mouse, u = g.x / innerWidth - .5, v = g.y / innerHeight - .5, n = s => (Math.random() - .5) * s;
-    onFrame({ ix: .22 * u + .03 * u * u + n(.006), iy: .14 * v + n(.006), yaw: .05 * u + n(.002), pitch: .04 * v + n(.002), cx: .5 + n(.002), cy: .5 + n(.002), size: .3 });
+    const g2 = SIM_GLARE ? 40 : 1;  // ?glare=1：模擬眼鏡反光（眼睛特徵很亂）
+    onFrame({ ix: .22 * u + n(.01 * g2), iy: .14 * v + n(.01 * g2), yaw: .25 * u + .02 * u * u + n(.004), pitch: .18 * v + n(.004), tx: n(.002), ty: n(.002), bx: .6 * u + n(.02 * g2), by: -.5 * v + n(.02 * g2), size: .32, blink: 0 });
   }, 33);
 }
 
+/* ---------- 擺位檢查：臉在框框中間、距離剛好、光線夠亮 ---------- */
+const lumaCv = document.createElement('canvas'); lumaCv.width = 32; lumaCv.height = 24;
+function luma() { try { const c = lumaCv.getContext('2d', { willReadFrequently: true }); c.drawImage($('#eye-cam'), 0, 0, 32, 24); const d = c.getImageData(0, 0, 32, 24).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += .3 * d[i] + .59 * d[i + 1] + .11 * d[i + 2]; return s / (d.length / 4); } catch (e) { return 128; } }
+async function positionCheck() {
+  if (EYE_SIM && !/[?&]pos=1/.test(location.search)) return;
+  const v = $('#eye-cam'); v.classList.remove('hide'); v.classList.add('big'); $('#pos-oval').hidden = false; $('#pos-msg').hidden = false;
+  $('#eye-boot').classList.add('on', 'pos'); bootStep('face', '擺位檢查：請把臉放進框框裡', '');
+  talk('請把臉放進框框裡，坐好。');
+  let good = 0; const t0 = performance.now();
+  while (performance.now() - t0 < 25000) {
+    await wait(250);
+    const f = EYE.last, fresh = performance.now() - EYE.lastFace < 400, L = luma();
+    let msg = '很好！保持這個姿勢', ok = true;
+    if (!fresh || !f) { msg = '看不到臉：請面向鏡頭'; ok = false; }
+    else if (L < 55) { msg = '光線太暗：請打開燈，或讓光從前面照到臉'; ok = false; }
+    else if (f.size < .16) { msg = '太遠了：請靠近鏡頭一點'; ok = false; }
+    else if (f.size > .6) { msg = '太近了：請離鏡頭遠一點'; ok = false; }
+    else if (Math.abs(f.tx) > .15 || Math.abs(f.ty) > .18) { msg = '請把臉移到框框中間'; ok = false; }
+    $('#pos-msg').textContent = msg; $('#pos-msg').className = ok ? 'ok' : '';
+    good = ok ? good + 1 : 0;
+    if (good >= 6) break;
+  }
+  v.classList.remove('big'); $('#pos-oval').hidden = true; $('#pos-msg').hidden = true; v.classList.toggle('hide', !S.set.eye.cam);
+  $('#eye-boot').classList.remove('on', 'pos');
+}
+
 /* ---------- 校正：星星跑 9 個位置，孩子只要看著 ---------- */
-const CAL_PTS = [[.5, .5], [.1, .14], [.5, .1], [.9, .14], [.9, .5], [.9, .86], [.5, .9], [.1, .86], [.1, .5]];
-async function calibrate() {
-  EYE.ready = false; EYE.model = null; FX.x = FY.x = null;
+const CAL_PTS = [[.5, .5], [.08, .1], [.5, .08], [.92, .1], [.92, .5], [.92, .9], [.5, .92], [.08, .9], [.08, .5]];
+async function calibrate(again = false) {
+  EYE.ready = false; EYE.model = null; FX.x = FY.x = null; EYE.bias = [0, 0];
+  await positionCheck();
   const lay = $('#eye-cal'), star = $('#cal-star'); lay.classList.add('on'); $('#cal-text').hidden = false;
   star.style.transform = `translate(${innerWidth / 2}px,${innerHeight / 2}px)`;
-  await Promise.race([talk('眼睛看著星星。星星跑到哪裡，眼睛就看哪裡！', 'happy'), wait(9000)]);
+  await Promise.race([talk(again ? '我們再看一次星星。頭不要動，只用眼睛看。' : '眼睛看著星星。星星跑到哪裡，眼睛就看哪裡！', 'happy'), wait(9000)]);
   $('#cal-text').hidden = true;
-  for (let round = 0; round < 2; round++) {
-    EYE.samples = [];
-    for (const [k, [px, py]] of CAL_PTS.entries()) {
-      const t = `translate(${px * innerWidth}px,${py * innerHeight}px)`; star.style.setProperty('--t', t); star.style.transform = t;
-      await wait(900);
-      let got = 0; const t0 = performance.now();
-      EYE.collect = f => { EYE.samples.push({ f, tx: px, ty: py, k }); got++; };
-      while (got < 22 && performance.now() - t0 < 7000) await wait(40);
-      EYE.collect = null; star.classList.remove('grab'); void star.offsetWidth; star.classList.add('grab');
-    }
-    if (chooseModel() && EYE.err < .16) break;
-    if (round === 0) await Promise.race([talk('再看一次星星，這次會更準！', 'happy'), wait(6000)]);
-  }
-  if (!EYE.ready && !chooseModel()) {
-    await Promise.race([talk('豆豆看不太到你的眼睛。請面向鏡頭，我們再看一次星星。'), wait(8000)]);
-    lay.classList.remove('on'); return calibrate();
+  EYE.samples = [];
+  for (const [k, [px, py]] of CAL_PTS.entries()) {
+    const t = `translate(${px * innerWidth}px,${py * innerHeight}px)`; star.style.setProperty('--t', t); star.style.transform = t;
+    await wait(1200);
+    const ss = []; const t0 = performance.now();
+    EYE.collect = f => ss.push({ f, tx: px, ty: py, k });
+    while (ss.length < 30 && performance.now() - t0 < 8000) await wait(40);
+    EYE.collect = null; EYE.samples.push(...robust(ss));
+    star.classList.remove('grab'); void star.offsetWidth; star.classList.add('grab');
   }
   lay.classList.remove('on');
-  const q = EYE.err == null ? '' : EYE.err < .08 ? '很好' : EYE.err < .14 ? '可以' : '不太準';
-  S.set.eye.last = { err: EYE.err, mode: EYE.model && EYE.model.mode, d: Date.now() }; save();
-  await Promise.race([talk(q === '不太準' ? '校正好了。如果不太準，可以請家人幫忙調整鏡頭位置，再重新校正。' : '校正好了！我們開始玩吧！', 'happy'), wait(7000)]);
-  return q;
+  if (!chooseModel()) { await Promise.race([talk('豆豆看不太到你的眼睛。請面向鏡頭，我們再看一次星星。'), wait(8000)]); return calibrate(true); }
+  S.set.eye.last = { err: EYE.err, mode: EYE.model.mode, d: Date.now() }; save();
+  return calResult();
+}
+// 校正分數：看「開始玩」或「再校正一次」，10 秒沒選就直接開始
+const calScore = () => Math.max(0, Math.min(100, Math.round(100 - EYE.err * 420)));
+function calResult() {
+  return new Promise(res => {
+    const sc = calScore(), lv = sc >= 75 ? '很準 😄' : sc >= 50 ? '可以 🙂' : '不太準 😕';
+    $('#calres-score').textContent = `${sc} 分　${lv}`;
+    $('#calres-mode').textContent = `追蹤方式：${EYE.model.mode === 'eye' ? '眼睛＋頭' : '只用頭'}`;
+    $('#calres-tip').textContent = sc >= 75 ? '' : '小提醒：臉正對鏡頭、光線從前面照、鏡頭和眼睛一樣高、校正時頭不要動。也可以在「眼睛設定」改成「只用頭」。';
+    openOv('ov-calres');
+    talk(sc >= 50 ? `校正好了，${sc}分！看著「開始玩」就可以開始。` : `校正只有${sc}分，不太準。可以看著「再校正一次」，或請家人調整位置。`, 'happy');
+    let done = false; const fin = v => { if (done) return; done = true; closeOv('ov-calres'); res(v); };
+    $('#calres-go').onclick = () => fin('go');
+    $('#calres-again').onclick = () => fin('again');
+    setTimeout(() => fin('go'), 12000);
+  }).then(v => v === 'again' ? calibrate(true) : v);
 }
 
 /* ---------- 注視停留選取 ---------- */
@@ -2539,6 +2620,8 @@ function gazeTargets() {
     const cs = getComputedStyle(n); return cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' && (+cs.opacity > .25 || n.getAnimations().length > 0);
   });
 }
+// 「一定要看準」的按鈕（回首頁、設定、換人、再聽一次）：眼神要在按鈕上才算
+const TIGHT = '#g-back,#h-who,#eye-btn-set,#eye-btn-cal,.again,.help-x';
 const DW = new Map(); let FOCUS = null, COOL = 0, LAST_T = performance.now();
 const dwellOf = n => S.set.eye.dwell * (+n.dataset.dwell || (n.classList.contains('tapme') ? .7 : 1));
 function gazeTick(now) {
@@ -2551,15 +2634,18 @@ function gazeTick(now) {
   cz.style.transform = `translate(${EYE.x}px,${EYE.y}px)`;
   if (blocked || noFace || now < COOL) { setFocus(null); ring.style.display = 'none'; return; }
   if (now - TG_T > 120) { TG = gazeTargets(); TG_T = now; }
+  const loose = TG.filter(n => !n.matches(TIGHT)), few = loose.length <= 4;
   let best = null, bd = 1e9, ba = 1e12;
   for (const n of TG) {
     const r = n.getBoundingClientRect(), dx = Math.max(r.left - EYE.x, 0, EYE.x - r.right), dy = Math.max(r.top - EYE.y, 0, EYE.y - r.bottom), d = Math.hypot(dx, dy), a = r.width * r.height;
+    if (n.matches(TIGHT) && d > 24) continue;
     if (d < bd || (d === bd && a < ba)) { bd = d; ba = a; best = n; }
   }
-  const R = Math.max(80, .13 * Math.min(innerWidth, innerHeight));
+  // 選項不多時，看大概的方向就會選最近的那一個；選項多時要看近一點
+  const R = few ? 1e9 : Math.max(90, .15 * Math.min(innerWidth, innerHeight));
   const f = best && bd <= R ? best : null;
   setFocus(f);
-  for (const [n, p] of DW) { const q = n === f ? p + dt / dwellOf(n) : p - dt / 1.1; if (q <= 0 || !n.isConnected) DW.delete(n); else DW.set(n, q); }
+  for (const [n, p] of DW) { const q = n === f ? p + dt / dwellOf(n) : p - dt / 1.2; if (q <= 0 || !n.isConnected) DW.delete(n); else DW.set(n, q); }
   if (f && !DW.has(f)) DW.set(f, dt / dwellOf(f));
   const p = f ? DW.get(f) || 0 : 0;
   if (f && p > 0) {
@@ -2567,10 +2653,17 @@ function gazeTick(now) {
     Object.assign(ring.style, { display: 'block', width: r.width + 2 * g + 'px', height: r.height + 2 * g + 'px', left: r.left - g + 'px', top: r.top - g + 'px', borderRadius: Math.min(br + g, (Math.min(r.width, r.height) + 2 * g) / 2) + 'px' });
     ring.style.setProperty('--p', Math.min(1, p).toFixed(3));
   } else ring.style.display = 'none';
-  if (f && p >= 1) { DW.clear(); COOL = now + 750; ring.style.display = 'none'; activate(f); }
+  if (f && p >= 1) { DW.clear(); COOL = now + 750; ring.style.display = 'none'; learn(f); activate(f); }
 }
 function setFocus(n) { if (FOCUS === n) return; if (FOCUS) FOCUS.classList.remove('gz-on'); FOCUS = n; if (n) n.classList.add('gz-on'); }
 function activate(n) { n.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })); }
+// 邊玩邊修正：選到一個目標時，孩子其實是看著它的中間，把偏差慢慢修正回來
+function learn(n) {
+  if (!EYE.model || !(n instanceof HTMLButtonElement)) return;   // 圖形區塊（塗色）不知道孩子看的是哪一點，不拿來修正
+  const r = n.getBoundingClientRect(); if (r.width > innerWidth * .6 || r.height > innerHeight * .6) return;
+  const ex = (r.left + r.width / 2 - EYE.x) / innerWidth, ey = (r.top + r.height / 2 - EYE.y) / innerHeight;
+  EYE.bias = [Math.max(-.15, Math.min(.15, EYE.bias[0] + .25 * ex)), Math.max(-.15, Math.min(.15, EYE.bias[1] + .25 * ey))];
+}
 
 /* ---------- 畫面：選人、年齡、首頁、設定 ---------- */
 function renderWho() {
@@ -2647,6 +2740,10 @@ $('#g-back').dataset.dwell = '2';
 $('#h-who').dataset.dwell = '1.6';
 ['#h-parent', '#break-skip', '#limit-more'].forEach(s => $(s) && ($(s).dataset.nogaze = ''));
 document.querySelectorAll('.help-btn').forEach(b => b.dataset.nogaze = '');
+
+/* ---------- 安全：不使用閃光（閃爍可能引發光敏感癲癇） ---------- */
+const TH = EVENTS.find(e => e.k === 'thunder');
+if (TH) TH.play = async sc => { const c = addProp(sc, '⛈️', '64%', '6%'); for (let k = 0; k < 2; k++) { c.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'translateX(0)' }], { duration: 400 }); sfx.rumble(); await sleep(900); } };
 
 /* ---------- 遊戲名稱與陪玩提示 ---------- */
 Object.assign(D.cog.title, { '2-3': '找找好朋友', '3-4': '看看數一數', '4-6': '規律小火車' });
@@ -3056,6 +3153,16 @@ $('#ov-help .help-sheet').innerHTML = `<button class="help-x" id="help-x" aria-l
     <li>看著年齡或頭像選人，再看著單元開始玩</li>
     <li>看著 🏠 久一點就回首頁；首頁有「眼睛設定」和「重新校正」</li>
     <li>如果聲音被瀏覽器擋住，請家人點一下畫面任何地方</li></ol></section>
+  <section><h3>使用規範（照著做會比較準）</h3><ol>
+    <li><b>鏡頭位置</b>：鏡頭在螢幕上方正中間，和眼睛差不多高；裝置用支架固定，玩的時候不要移動</li>
+    <li><b>距離</b>：臉離鏡頭約 40–70 公分，臉在擺位框框中間</li>
+    <li><b>光線</b>：光從前面照亮臉；不要背對窗戶，也不要只有頭頂一盞燈</li>
+    <li><b>眼鏡</b>：鏡片擦乾淨；有反光就把眼鏡稍微往下調，或在「眼睛設定」改成「只用頭」</li>
+    <li><b>擺位</b>：坐姿和頭部要有支撐（頭靠、側墊），校正和玩的時候姿勢一樣；換姿勢、換位置就要重新校正</li>
+    <li><b>校正</b>：看星星時頭盡量不動、只用眼睛看；分數低於 50 分請再校正一次</li>
+    <li><b>選取</b>：看著選項直到圓框繞完一圈；太快誤選就把「看多久才選取」調慢，頭或眼睛會晃就開「加強穩定」</li>
+    <li><b>休息與安全</b>：每個單元約 15 分鐘，結束會休息 3 分鐘；孩子眼睛疲勞、流淚、頭痛或不舒服就停止。遊戲不使用閃光</li>
+    <li><b>隱私</b>：鏡頭影像只在這台裝置上分析，不錄影、不上傳</li></ol></section>
   <button class="btn" id="help-ok" style="--dc:var(--soc);--dcs:var(--soc-s)">知道了</button>`;
 $('#help-x').onclick = $('#help-ok').onclick = () => closeOv('ov-help');
 
