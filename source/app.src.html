@@ -497,16 +497,17 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 .drag-hint{position:absolute;font-size:44px;z-index:8;pointer-events:none;margin:-22px 0 0 -22px}
 #break-count{font-variant-numeric:tabular-nums}
 /* 注音：每個字是固定比例的框——字 1×1、右邊注音欄同高；符號位置由程式算好，不受字型影響 */
-.zy{display:inline-block;position:relative;font-size:1.25em;width:1.5em;height:1.3em;line-height:1.3em;vertical-align:baseline;white-space:nowrap}
+.zy{display:inline-block;position:relative;font-size:1.35em;width:1.52em;height:1.3em;line-height:1.3em;vertical-align:baseline;white-space:nowrap}
 /* 框裡放一個看不見的全形空白，讓這個框的基線和一般文字一樣，整行才會對齊 */
 .zy::before{content:'　';display:inline-block;width:1em;line-height:1.3em}
 .no-zy .zy::before{content:none}
 .zy .zc{display:inline-block!important;position:absolute!important;left:0;top:.15em;width:1em!important;height:1em!important;line-height:1em!important;font-size:1em!important;text-align:center;font-weight:inherit!important;color:inherit!important}
-.zy .zp{display:block!important;position:absolute!important;left:1.03em;top:.2em;width:.36em;height:1em;font-size:1em!important;color:inherit!important}
-.zy .zs,.zy .zt,.zy .zl{display:block!important;position:absolute!important;font-size:.29em!important;line-height:1.149!important;height:1.149em!important;margin:0!important;padding:0!important;color:inherit!important;font-weight:600!important;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif}
-.zy .zs{left:0;width:1.24em;text-align:center}
-.zy .zt{left:1.05em}
-.zy .zl{left:0;width:1.24em;text-align:center}
+.zy .zp{display:block!important;position:absolute!important;left:1.03em;top:.17em;width:.38em;height:1em;font-size:1em!important;color:inherit!important}
+/* 注音符號用「整字大小再縮小」畫出來：不受瀏覽器最小字級（中文版預設 12px）影響，比例永遠正確 */
+.zy .zs,.zy .zt,.zy .zl{display:block!important;position:absolute!important;font-size:1em!important;line-height:1.08em!important;height:1.08em!important;margin:0!important;padding:0!important;color:inherit!important;font-weight:600!important;transform:scale(.33);transform-origin:0 0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif}
+.zy .zs{left:0;width:1.15em;text-align:center}
+.zy .zt{left:.3em;width:.6em;text-align:left}
+.zy .zl{left:0;width:1.15em;text-align:center}
 .no-zy .zy{width:auto;font-size:1em;height:auto;line-height:inherit}
 .no-zy .zy .zc{position:static!important;width:auto!important;height:auto!important;line-height:inherit!important}
 .no-zy .zp{display:none!important}
