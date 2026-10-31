@@ -497,9 +497,26 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 .drag-hint{position:absolute;font-size:44px;z-index:8;pointer-events:none;margin:-22px 0 0 -22px}
 #break-count{font-variant-numeric:tabular-nums}
 /* 注音：每個字右邊直式小注音 */
-.zy{display:inline-flex;align-items:center;vertical-align:bottom;line-height:1.2}
-.zp{writing-mode:vertical-rl;text-orientation:upright;font-size:max(.36em,8px);line-height:1;letter-spacing:-.08em;margin-left:.04em;font-weight:600;opacity:.82;white-space:nowrap}
-.no-zy .zp{display:none}
+.zy{display:inline-flex;align-items:center;vertical-align:top;white-space:nowrap;margin-right:.1em}
+.zc{display:block;line-height:1;height:1em}
+/* 注音欄：和字一樣高，上下對齊；每個符號約字高的 1/3 */
+.zp{position:relative;display:inline-flex;flex-direction:column;justify-content:center;align-items:center;height:1em;width:.4em;margin-left:.05em;line-height:1}
+.zs{position:relative;display:block;font-size:.37em;line-height:.9;height:.9em;text-align:center;font-weight:600}
+.zp.n1 .zs,.zp.n2 .zs{line-height:1;height:1em}
+.zt{position:absolute;left:92%;top:-.38em;font-size:1em;line-height:1}
+.zl{position:absolute;top:-.12em;left:50%;transform:translateX(-50%);font-size:.37em;line-height:1}
+/* 開注音時，小字放大一點，注音才看得清楚 */
+body:not(.no-zy) :is(small,.muted,.tip,.p-row > span,.tile > small){font-size:max(1em,16px)}
+/* 注音各部分的大小鎖住，不受外面「某某 span」樣式影響 */
+.zy .zc{font-size:1em!important;display:block!important;line-height:1!important;height:1em!important;font-weight:inherit!important;color:inherit!important}
+.zy .zp{font-size:1em!important;display:inline-flex!important;color:inherit!important}
+.zy .zs{font-size:.37em!important;display:block!important;line-height:.9!important;height:.9em!important;font-weight:600!important;color:inherit!important;margin:0!important;padding:0!important}
+.zy .zp.n1 .zs,.zy .zp.n2 .zs{line-height:1!important;height:1em!important}
+.zy .zt{font-size:1em!important;display:inline!important;color:inherit!important}
+.zy .zl{font-size:.37em!important;display:inline!important;color:inherit!important}
+body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.75}
+.no-zy .zp{display:none!important}
+.no-zy .zy{margin-right:0}
 /* 點點數一數：大數字用不同的顏色 */
 .num-alt .bignum{color:var(--soc);-webkit-text-stroke:5px #fff;paint-order:stroke fill}
 /* 表情念到哪一個，就亮哪一個 */
@@ -2304,6 +2321,14 @@ function zyRead(s, i) {
   const c = s[i], p = HAN.test(s[i - 1] || '') ? s[i - 1] : '_', n = HAN.test(s[i + 1] || '') ? s[i + 1] : '_', C = ZYD.c || {};
   return C[p + c + n] || C[p + c + '_'] || C['_' + c + n] || (ZYD.d || {})[c];
 }
+const ZY_TONE = 'ˊˇˋ';
+function zyHTML(r) {
+  let light = false, tone = '', sy = [...r];
+  if (sy[0] === '˙') { light = true; sy.shift(); }
+  if (ZY_TONE.includes(sy[sy.length - 1])) tone = sy.pop();
+  const parts = sy.map((c, i) => `<span class="zs">${c}${i === sy.length - 1 && tone ? `<span class="zt">${tone}</span>` : ''}</span>`);
+  return `<span class="zp n${sy.length}${light ? ' lt' : ''}" aria-hidden="true">${light ? '<span class="zl">˙</span>' : ''}${parts.join('')}</span>`;
+}
 const zyOk = e => e && !e.closest('.zy,svg,[data-nozy],script,style,textarea,select,option,title,canvas');
 function zyNode(t) {
   const s = t.nodeValue; if (!HAN.test(s)) return;
@@ -2313,7 +2338,7 @@ function zyNode(t) {
     if (!r) { buf += ch; continue; }
     if (buf) { f.append(buf); buf = ''; }
     const z = document.createElement('span'); z.className = 'zy';
-    z.innerHTML = `<span class="zc">${ch}</span><span class="zp" aria-hidden="true">${r}</span>`;
+    z.innerHTML = `<span class="zc">${ch}</span>${zyHTML(r)}`;
     f.append(z); any = true;
   }
   if (!any) return;
