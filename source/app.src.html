@@ -516,6 +516,9 @@ body:not(.no-zy) :is(small,.muted,.tip,.p-row > span,.tile > small){font-size:ma
 body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.6}
 /* 點點數一數：大數字用不同的顏色 */
 .num-alt .bignum{color:var(--soc);-webkit-text-stroke:5px #fff;paint-order:stroke fill}
+.num-pick .num{color:var(--move)}
+.num-pick .opt{border-color:color-mix(in srgb,var(--move) 45%,var(--line))}
+.num-pick .opt.right{box-shadow:0 0 0 6px var(--move),var(--shadow)}
 /* 表情念到哪一個，就亮哪一個 */
 .opt.say-now{box-shadow:0 0 0 6px var(--dc),var(--shadow);transform:scale(1.06)}
 /* 分享：這次要給的好朋友 */
@@ -858,6 +861,25 @@ const SFX = {
   freeze() { const t = now(); [0, 4, 7].forEach(n => inst.bell(P[n] / 2, t, .12)); },
   tick() { inst.wood(1400, now(), .12); },
   chug() { const t = now(); for (let i = 0; i < 4; i++) noise(t + i * .16, .1, .16, 500, 300, 1); osc('sine', 700, t + .7, .3, .1, 650); },
+  // 火車開動：先鳴汽笛（嗚——嗚），蒸汽「噗嗤噗嗤」越跑越快，車輪喀噠喀噠，最後叮叮兩聲
+  train(dur = 1.3) { const t = now();
+    [[0, .45], [.55, .3]].forEach(([d, l]) => [587, 740, 880].forEach(f => { osc('triangle', f, t + d, l, .07); osc('sine', f * 2, t + d, l * .8, .015); }));
+    for (let x = .15, k = 0; x < dur; k++) { noise(t + x, .11, k % 2 ? .1 : .2, 1100, 350, .9); x += Math.max(.12, .26 - k * .012); }
+    for (let x = .3; x < dur; x += .38) { inst.wood(196, t + x, .16); inst.wood(165, t + x + .08, .13); }
+    inst.bell(P[7], t + dur - .1, .07); inst.bell(P[7], t + dur + .15, .06);
+  },
+  // 心情小偵探的場景音效
+  wind() { const t = now(); noise(t, 1.6, .22, 400, 1800, .6); noise(t + .3, 1.2, .12, 900, 2600, .8); },
+  fall() { const t = now(); osc('sine', 1300, t, .6, .12, 380); },
+  steps(n = 4, gap = .26, f = 520) { const t = now(); for (let i = 0; i < n; i++) { noise(t + i * gap, .07, .2, f, f * .7, 2); inst.wood(f / 2, t + i * gap, .1); } },
+  rattle() { const t = now(); for (let i = 0; i < 6; i++) inst.wood(300 + (i % 2) * 90, t + i * .15, .2); },
+  fanfare() { const t = now(); [0, 2, 4, 7].forEach((n, i) => inst.bell(P[n], t + i * .12, .1)); inst.marimba(P[7], t + .5, .3); },
+  sad() { const t = now(); osc('triangle', 520, t, .5, .14, 440); osc('triangle', 440, t + .5, .5, .13, 370); osc('triangle', 370, t + 1, .8, .12, 300); },
+  angry() { const t = now(); osc('sawtooth', 160, t, .35, .06, 120); osc('square', 110, t + .05, .3, .04, 90); },
+  creepy() { const t = now(); [0, .45, .9].forEach((d, i) => osc('triangle', 147 - i * 8, t + d, .4, .14)); },
+  powerDown() { const t = now(); osc('sine', 900, t, .9, .14, 90); noise(t + .1, .5, .08, 300, 100, .7); },
+  bang() { const t = now(); noise(t, .5, .3, 900, 120, .6); [7, 9, 8, 9].forEach((n, i) => inst.pluck(P[n], t + .15 + i * .07, .08)); },
+  magic() { const t = now(); [0, 2, 4, 5, 7, 9].forEach((n, i) => inst.bell(P[n], t + i * .09, .07)); },
   crash() { const t = now(); noise(t, .5, .25, 1500, 200, .7); [3, 1, 0].forEach((n, i) => inst.wood(P[n] / 2, t + i * .09, .18)); },
   rumble() { const t = now(); noise(t, 1.2, .3, 160, 60, .7); },
   splat() { const t = now(); noise(t, .2, .2, 900, 300, 1); osc('sine', 300, t, .15, .15, 120); },
@@ -906,8 +928,10 @@ const PACE = { normal: 1.15, happy: 1.2, surprised: 1.2, sad: 1, scared: 1.05, a
 const SAY_FIX = [[/擲骰子/g, '丟點點方塊'], [/骰到幾/g, '出現幾個點'], [/骰到/g, '出現'], [/骰子/g, '點點方塊'], [/數數看/g, '鼠鼠看'], [/數一數/g, '鼠一鼠'], [/一下一下數/g, '一下一下鼠'], [/一起數/g, '一起鼠'], [/只數/g, '只鼠'],
   [/轉一圈/g, '轉圈圈'], [/原地/g, '原位'], [/差一點點/g, '就快對了']];
 // 注音符號念成它的音（語音沒辦法直接念符號）
-const ZY_SOUND = { ㄅ: '玻', ㄆ: '坡', ㄇ: '摸', ㄈ: '佛', ㄉ: '得', ㄊ: '特', ㄋ: '訥', ㄌ: '勒', ㄍ: '哥', ㄎ: '科', ㄏ: '喝', ㄐ: '基', ㄑ: '欺', ㄒ: '希', ㄓ: '知', ㄔ: '吃', ㄕ: '詩', ㄖ: '日', ㄗ: '資', ㄘ: '疵', ㄙ: '思', ㄧ: '衣', ㄨ: '烏', ㄩ: '迂' };
-const sayFix = t => SAY_FIX.reduce((x, [re, to]) => x.replace(re, to), t).replace(/[ㄅ-ㄩ]/g, c => ZY_SOUND[c] || c).replace(/[喔囉唷]+(?=[！!。，,？?～~]|$)/g, '');
+// 選讀音固定的字（得 會念成 ˙ㄉㄜ／ㄉㄟˇ，喝 會念成 ㄏㄜˋ，所以改用 德、呵）
+const ZY_SOUND = { ㄅ: '玻', ㄆ: '坡', ㄇ: '摸', ㄈ: '佛', ㄉ: '德', ㄊ: '特', ㄋ: '訥', ㄌ: '勒', ㄍ: '哥', ㄎ: '科', ㄏ: '呵', ㄐ: '基', ㄑ: '欺', ㄒ: '希', ㄓ: '知', ㄔ: '吃', ㄕ: '詩', ㄖ: '日', ㄗ: '資', ㄘ: '疵', ㄙ: '思', ㄧ: '衣', ㄨ: '烏', ㄩ: '迂',
+  ㄚ: '啊', ㄛ: '喔', ㄜ: '鵝', ㄝ: '欸', ㄞ: '哀', ㄟ: '欸', ㄠ: '凹', ㄡ: '歐', ㄢ: '安', ㄣ: '恩', ㄤ: '骯', ㄥ: '鞥', ㄦ: '兒' };
+const sayFix = t => SAY_FIX.reduce((x, [re, to]) => x.replace(re, to), t).replace(/[ㄅ-ㄩ]/g, c => ZY_SOUND[c] || c).replace(/[ˉˊˇˋ˙]/g, '').replace(/[喔囉唷]+(?=[！!。，,？?～~]|$)/g, '');
 const liven = t => t;
 const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 const SLOW_PACE = MOBILE ? .55 : .73;
@@ -932,15 +956,15 @@ function speak(t, mood = 'normal', slow = false) {
         const q = /[？?]$/.test(c), ex = /[！!～~]$/.test(c), comma = /[，、,]$/.test(c);
         const contour = i === 0 ? .04 : (i % 2 ? -.05 : .03);
         if (slow) {
-          // 說明時音高貼近自然聲音（變調加上放慢最容易破音），問句微微上揚
-          u.pitch = Math.max(.98, Math.min(1.14, 1.04 + contour * .6 + (Math.random() - .5) * .05 + (q ? .06 : 0)));
-          u.rate = Math.max(.4, Math.min(1.1, SLOW_PACE * talkSpeed() + (Math.random() - .5) * .03));
+          // 說明：每一句都用同一個音高、同一個速度（不加隨機變化），每個單元聽起來一致
+          u.pitch = 1.05;
+          u.rate = Math.max(.4, Math.min(1.1, SLOW_PACE * talkSpeed()));
         } else {
           u.pitch = Math.max(.92, Math.min(1.35, base + contour + (Math.random() - .5) * .14 + (q ? .12 : 0) + (ex ? .08 : 0)));
           u.rate = Math.max(.95, Math.min(1.35, pace + (Math.random() - .5) * .12 + (ex ? .06 : 0) - (q ? .03 : 0)));
         }
         u.volume = 1;
-        const gap = slow ? (comma ? 260 : 480) / talkSpeed() : 0;
+        const gap = slow ? (comma ? 300 : 450) / talkSpeed() : 0;
         let next = false;
         const go = () => { if (next) return; next = true; if (i + 1 >= parts.length) finish(); else setTimeout(() => say(i + 1), gap); };
         u.onend = u.onerror = go;
@@ -1317,7 +1341,7 @@ GAMES['cog3-4'] = (dom) => rounds(dom, 5, async (i, lv) => {
     return { n, t, o, m, key: `${t.e}${n}${m ? o.e + m : ''}` };
   });
   const { n, t, o, m } = q, total = n + m, size = total <= 4 ? 96 : total <= 6 ? 84 : total <= 9 ? 70 : 60;
-  const wrap = body(`<div class="scene ${SCENES[i % 4]} num-alt" style="min-height:min(50vh,380px)"><div class="hill"></div><div class="sign">👆 ${m ? `只數 ${t.e}` : '點點看'}</div><div class="count-box"></div></div><div class="q-opts"></div>`);
+  const wrap = body(`<div class="scene ${SCENES[i % 4]} num-alt" style="min-height:min(50vh,380px)"><div class="hill"></div><div class="sign">👆 ${m ? `只數 ${t.e}` : '點點看'}</div><div class="count-box"></div></div><div class="q-opts num-pick"></div>`);
   const sc = wrap.querySelector('.scene'), box = wrap.querySelector('.count-box'), opts = wrap.querySelector('.q-opts');
   let c = 0;
   const counted = new Promise(res => {
@@ -1361,7 +1385,7 @@ GAMES['cog4-6'] = (dom) => rounds(dom, 5, async (i, lv) => {
     <div class="train" style="--cw:${cw}px"><div class="car engine"><i></i><span class="smoke"></span><span class="smoke" style="animation-delay:.7s"></span>🙂</div>${full.map((e, k) => k === slotAt ? '<div class="car slot">?</div>' : `<div class="car" style="--cc:${CAR_C[k % 7]}">${e}</div>`).join('')}</div></div><div class="q-opts"></div>`);
   const train = wrap.querySelector('.train'), slot = wrap.querySelector('.slot'), opts = wrap.querySelector('.q-opts');
   // 火車開動的聲音（不受「額外音效」開關影響）
-  const trainSound = ms => { for (let t = 0; t < ms; t += 420) later(() => { try { SFX.chug(); } catch (e) {} }, t); };
+  const trainSound = ms => { try { SFX.train(ms / 1000); } catch (e) {} };
   let res0; const boarded = new Promise(r => res0 = r);
   {
     const res = res0;
@@ -1530,9 +1554,8 @@ GAMES['lang4-6'] = (dom) => rounds(dom, 5, async (i, lv) => {
   });
   const qText = need > 1 ? `名字是「${z}」開頭的魚有${need}條，一條一條點，把牠們釣起來！` : `名字是「${z}」開頭的魚，點一下把牠釣起來！`;
   const oText = `水裡的魚有：${fish.map(w => w.n).join('、')}。`;
-  sc.querySelector('.again').onclick = () => talk(`${qText}${oText}`);
+  sc.querySelector('.again').onclick = () => talk(`${qText}${oText}`, 'normal', true);
   await prompt(qText); await prompt(oText);
-  await prompt(`再聽一次。${qText}`); await prompt(oText);
   setQ(`「${z}」開頭：${tg.map(w => w.n).join('、')}`);
   await done; wrap.remove();
 });
@@ -1685,18 +1708,18 @@ GAMES['emo2-3'] = (dom) => rounds(dom, 4, async (i) => {
 // 情境事件（3–4、4–6 共用場景）：用幾種動畫樣板組合出 30 多種不同的事件
 function addProp(sc, e, left, top) { const p = el(`<span class="prop" style="left:${left};top:${top}">${e}</span>`); sc.appendChild(p); return p; }
 const EV = {
-  fly: (e, t) => ({ a: '難過', t, async play(sc) { const b = addProp(sc, e, '62%', '30%'); await sleep(700); sfx.whoosh(); await b.animate([{ transform: 'translate(0,0)' }, { transform: 'translate(70px,-300px) rotate(18deg)' }], { duration: 2200, easing: 'ease-in', fill: 'forwards' }).fin; } }),
-  drop: (e, t, a = '難過') => ({ a, t, async play(sc) { const b = addProp(sc, e, '60%', '36%'); await sleep(800); await b.animate([{ transform: 'translate(0,0) rotate(0)' }, { transform: 'translate(30px,140px) rotate(160deg)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }).fin; sfx.splat(); await sleep(700); } }),
-  gift: (e, t) => ({ a: '開心', t, async play(sc) { const b = addProp(sc, '🎁', '64%', '-20%'); sfx.whoosh(); await b.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(240px)' }], { duration: 700, easing: 'cubic-bezier(.4,1.6,.6,1)', fill: 'forwards' }).fin; sfx.boing(); await sleep(400); b.textContent = e; burst(b, 12, ['✨', '🎉']); sfx.sparkle(); await sleep(900); } }),
-  come: (e, t, snd) => ({ a: '開心', t, async play(sc) { const b = addProp(sc, e, '100%', '58%'); await b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-38vw)' }], { duration: 1200, easing: 'ease-out', fill: 'forwards' }).fin; if (snd) playAnimal(snd); burst(b, 8, ['💕']); await sleep(1200); } }),
-  knock: (e, t) => ({ a: '生氣', t, async play(sc) { const bs = [0, 1, 2].map(k => addProp(sc, e, '66%', `${58 - k * 13}%`)); await sleep(800); const p = addProp(sc, '👋', '86%', '40%'); await p.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-60px)' }], { duration: 300, fill: 'forwards' }).fin; sfx.crash(); bs.forEach((b, k) => b.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${40 + k * 30}px,${80 - k * 10}px) rotate(${90 + k * 60}deg)` }], { duration: 600, fill: 'forwards' })); await sleep(900); p.remove(); } }),
-  grab: (e, t) => ({ a: '生氣', t, async play(sc) { const b = addProp(sc, e, '58%', '52%'); await sleep(700); const h = addProp(sc, '✋', '100%', '48%'); await h.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-38vw)' }], { duration: 600, fill: 'forwards' }).fin; sfx.whoosh(); b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(60vw)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }); await h.animate([{ transform: 'translateX(-38vw)' }, { transform: 'translateX(20vw)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }).fin; await sleep(500); } }),
-  thunder: t => ({ a: '害怕', t, async play(sc) { addProp(sc, '⛈️', '64%', '6%'); const f = el('<div class="flash"></div>'); sc.appendChild(f); await sleep(500); for (let k = 0; k < 2; k++) { f.animate([{ opacity: 0 }, { opacity: .9 }, { opacity: 0 }], { duration: 300 }); sfx.rumble(); await sleep(800); } } }),
-  creep: (e, t, snd) => ({ a: '害怕', t, async play(sc) { const b = addProp(sc, e, '100%', '50%'); b.style.fontSize = '76px'; await b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-30vw)' }], { duration: 1800, easing: 'ease-out', fill: 'forwards' }).fin; if (snd) await playAnimal(snd); await sleep(600); } }),
-  dark: t => ({ a: '害怕', t, async play(sc) { const n = el('<div class="night" style="opacity:0"></div>'); sc.appendChild(n); await n.animate([{ opacity: 0 }, { opacity: .85 }], { duration: 900, fill: 'forwards' }).fin; addProp(sc, '👀', '70%', '30%').style.zIndex = 6; await sleep(1200); } }),
-  pop: (e, t) => ({ a: '驚訝', t, async play(sc) { const b = addProp(sc, '📦', '64%', '50%'); await sleep(500); b.animate([{ transform: 'rotate(-8deg)' }, { transform: 'rotate(8deg)' }], { duration: 150, iterations: 6 }); await sleep(900); const f = addProp(sc, e, '64%', '44%'); sfx.boing(); await f.animate([{ transform: 'translateY(0) scale(.5)' }, { transform: 'translateY(-120px) scale(1.3)' }, { transform: 'translateY(-70px) scale(1.1)' }], { duration: 700, fill: 'forwards' }).fin; await sleep(400); } }),
-  appear: (e, t, a) => ({ a, t, async play(sc) { const b = addProp(sc, e, '62%', '12%'); b.style.fontSize = '84px'; await b.animate([{ opacity: 0, transform: 'scale(.3)' }, { opacity: 1, transform: 'scale(1.1)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 900, fill: 'forwards' }).fin; burst(b, 10, ['✨']); await sleep(900); } }),
-  wilt: t => ({ a: '難過', t, async play(sc) { const b = addProp(sc, '🌷', '62%', '50%'); await sleep(900); b.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(25deg) translateY(10px)' }], { duration: 900, fill: 'forwards' }); await sleep(900); b.textContent = '🥀'; await sleep(900); } }),
+  fly: (e, t) => ({ a: '難過', t, async play(sc) { const b = addProp(sc, e, '62%', '30%'); await sleep(700); SFX.wind(); SFX.whoosh(); await b.animate([{ transform: 'translate(0,0)' }, { transform: 'translate(70px,-300px) rotate(18deg)' }], { duration: 2200, easing: 'ease-in', fill: 'forwards' }).fin; } }),
+  drop: (e, t, a = '難過') => ({ a, t, async play(sc) { const b = addProp(sc, e, '60%', '36%'); await sleep(800); SFX.fall(); await b.animate([{ transform: 'translate(0,0) rotate(0)' }, { transform: 'translate(30px,140px) rotate(160deg)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }).fin; SFX.splat(); if (a === '難過') later(() => SFX.sad(), 250); await sleep(900); } }),
+  gift: (e, t) => ({ a: '開心', t, async play(sc) { const b = addProp(sc, '🎁', '64%', '-20%'); SFX.whoosh(); await b.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(240px)' }], { duration: 700, easing: 'cubic-bezier(.4,1.6,.6,1)', fill: 'forwards' }).fin; SFX.boing(); await sleep(400); b.textContent = e; burst(b, 12, ['✨', '🎉']); SFX.sparkle(); SFX.fanfare(); await sleep(900); } }),
+  come: (e, t, snd) => ({ a: '開心', t, async play(sc) { const b = addProp(sc, e, '100%', '58%'); SFX.steps(5, .22, 640); await b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-38vw)' }], { duration: 1200, easing: 'ease-out', fill: 'forwards' }).fin; if (snd) playAnimal(snd); else SFX.fanfare(); burst(b, 8, ['💕']); await sleep(1200); } }),
+  knock: (e, t) => ({ a: '生氣', t, async play(sc) { const bs = [0, 1, 2].map(k => addProp(sc, e, '66%', `${58 - k * 13}%`)); await sleep(800); const p = addProp(sc, '👋', '86%', '40%'); await p.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-60px)' }], { duration: 300, fill: 'forwards' }).fin; SFX.crash(); later(() => SFX.angry(), 600); bs.forEach((b, k) => b.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${40 + k * 30}px,${80 - k * 10}px) rotate(${90 + k * 60}deg)` }], { duration: 600, fill: 'forwards' })); await sleep(900); p.remove(); } }),
+  grab: (e, t) => ({ a: '生氣', t, async play(sc) { const b = addProp(sc, e, '58%', '52%'); await sleep(700); const h = addProp(sc, '✋', '100%', '48%'); await h.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-38vw)' }], { duration: 600, fill: 'forwards' }).fin; SFX.whoosh(); later(() => SFX.angry(), 700); b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(60vw)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }); await h.animate([{ transform: 'translateX(-38vw)' }, { transform: 'translateX(20vw)' }], { duration: 700, easing: 'ease-in', fill: 'forwards' }).fin; await sleep(500); } }),
+  thunder: t => ({ a: '害怕', t, async play(sc) { addProp(sc, '⛈️', '64%', '6%'); const f = el('<div class="flash"></div>'); sc.appendChild(f); await sleep(500); for (let k = 0; k < 2; k++) { f.animate([{ opacity: 0 }, { opacity: .9 }, { opacity: 0 }], { duration: 300 }); SFX.rumble(); await sleep(800); } } }),
+  creep: (e, t, snd) => ({ a: '害怕', t, async play(sc) { const b = addProp(sc, e, '100%', '50%'); b.style.fontSize = '76px'; SFX.creepy(); SFX.steps(6, .3, 260); await b.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-30vw)' }], { duration: 1800, easing: 'ease-out', fill: 'forwards' }).fin; if (snd) await playAnimal(snd); await sleep(600); } }),
+  dark: t => ({ a: '害怕', t, async play(sc) { const n = el('<div class="night" style="opacity:0"></div>'); sc.appendChild(n); SFX.powerDown(); later(() => SFX.creepy(), 900); await n.animate([{ opacity: 0 }, { opacity: .85 }], { duration: 900, fill: 'forwards' }).fin; addProp(sc, '👀', '70%', '30%').style.zIndex = 6; await sleep(1200); } }),
+  pop: (e, t) => ({ a: '驚訝', t, async play(sc) { const b = addProp(sc, '📦', '64%', '50%'); await sleep(500); b.animate([{ transform: 'rotate(-8deg)' }, { transform: 'rotate(8deg)' }], { duration: 150, iterations: 6 }); SFX.rattle(); await sleep(900); const f = addProp(sc, e, '64%', '44%'); SFX.boing(); await f.animate([{ transform: 'translateY(0) scale(.5)' }, { transform: 'translateY(-120px) scale(1.3)' }, { transform: 'translateY(-70px) scale(1.1)' }], { duration: 700, fill: 'forwards' }).fin; await sleep(400); } }),
+  appear: (e, t, a) => ({ a, t, async play(sc) { const b = addProp(sc, e, '62%', '12%'); b.style.fontSize = '84px'; if (e === '🎆') { SFX.bang(); later(() => SFX.bang(), 500); } else SFX.magic(); await b.animate([{ opacity: 0, transform: 'scale(.3)' }, { opacity: 1, transform: 'scale(1.1)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 900, fill: 'forwards' }).fin; burst(b, 10, ['✨']); await sleep(900); } }),
+  wilt: t => ({ a: '難過', t, async play(sc) { const b = addProp(sc, '🌷', '62%', '50%'); await sleep(900); b.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(25deg) translateY(10px)' }], { duration: 900, fill: 'forwards' }); await sleep(900); b.textContent = '🥀'; SFX.sad(); await sleep(1300); } }),
 };
 const EVENTS = [
   ['balloon', EV.fly('🎈', '豆豆的氣球飛走了')], ['kite', EV.fly('🪁', '豆豆的風箏飛走了')], ['cap', EV.fly('🧢', '大風把豆豆的帽子吹走了')],
@@ -1736,7 +1759,7 @@ GAMES['emo3-4'] = (dom) => rounds(dom, 5, async (i, lv) => {
   await prompt('仔細看，豆豆發生了什麼事？');
   await ev.play(sc); setQ(`${ev.t}（答案：${ev.a}）`);
   setBody(slot, 'think', 'idle'); await prompt(`${ev.t}。豆豆會覺得怎麼樣？點一下豆豆的表情！`);
-  wrap.querySelector('.again').onclick = () => talk(`${ev.t}。豆豆會覺得怎麼樣？點一下豆豆的表情！`);
+  wrap.querySelector('.again').onclick = () => talk(`${ev.t}。豆豆會覺得怎麼樣？點一下豆豆的表情！`, 'normal', true);
   const opts = shuffle([ev.a, ...sample(Object.keys(MOODS).filter(n => n !== ev.a), lv === 0 ? 1 : 2)]);
   const pr = choose(box, opts.map(n => ({ ...faceOpt(n), ok: n === ev.a, say: n === ev.a ? `對！豆豆覺得${n}。` : `這是${n}` })), {
     right: () => setBody(slot, MOODS[ev.a]), wait: 2200,
@@ -1949,7 +1972,7 @@ GAMES['art2-3'] = GAMES['art3-4'] = GAMES['art4-6'] = (dom, age) => {
     if (!k) { guide.innerHTML = ''; demo.hidden = true; talk('自由畫畫，想畫什麼都可以！', 'happy'); return; }
     guide.innerHTML = TPL[k].s; demo.innerHTML = TPL[k].s; demo.hidden = false;
     const parts = [...demo.children]; let t = 0;
-    parts.forEach(p => { const len = Math.ceil(p.getTotalLength ? p.getTotalLength() : 200); p.style.strokeDasharray = len; p.style.strokeDashoffset = len; p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 875, delay: t, fill: 'forwards' }); t += 810; });
+    parts.forEach(p => { const len = Math.ceil(p.getTotalLength ? p.getTotalLength() : 200); p.style.strokeDasharray = len; p.style.strokeDashoffset = len; p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 1050, delay: t, fill: 'forwards' }); t += 970; });
     talk(`我們來畫${TPL[k].n}！先看豆豆畫，再跟著虛線畫畫看！`, 'happy');
   }
   st.querySelector('.tmpl-row').onclick = e => { const b = e.target.closest('.tmpl'); if (!b) return; sfx.tap(); setTpl(b.dataset.t); };
