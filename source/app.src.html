@@ -335,7 +335,9 @@ h1,h2,h3,p{margin:0}
 .canvas-box canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 .guide{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .guide path,.guide circle,.guide ellipse,.guide line,.guide rect{fill:none;stroke:#C9C2DA;stroke-width:4;stroke-dasharray:2 10;stroke-linecap:round;stroke-linejoin:round}
-.demo{position:absolute;left:10px;top:10px;width:120px;height:90px;border-radius:16px;background:#FFF7EC;box-shadow:0 4px 12px rgba(0,0,0,.12);pointer-events:none;z-index:2}
+.demo{position:absolute;left:10px;top:10px;width:120px;height:90px;border-radius:16px;background:#FFF7EC;box-shadow:0 4px 12px rgba(0,0,0,.12);pointer-events:none;z-index:2;transition:all .6s ease}
+.demo.big{left:0;top:0;width:100%;height:100%;border-radius:0;background:transparent;box-shadow:none}
+.demo .pen{fill:#FF7A45;stroke:#fff;stroke-width:3}
 .demo path,.demo circle,.demo ellipse,.demo line,.demo rect{fill:none;stroke:var(--art);stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
 .tmpl-row{display:flex;gap:10px;overflow-x:auto;padding:4px 2px 8px;justify-content:center;flex-wrap:wrap}
 .tmpl{width:72px;height:56px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);display:grid;place-items:center;font-size:13px;flex:none}
@@ -943,8 +945,8 @@ function speak(t, mood = 'normal', slow = false) {
     try {
       speechSynthesis.cancel(); t = sayFix(t);
       const id = ++SPEAK_ID;
-      // 說明：句子再切到逗號，一段一段念、中間停一下；一般短句整句念
-      const re = slow ? /[^，、。！？～~,!?]+[，、。！？～~,!?]*/g : /[^。！？～~!?]+[。！？～~!?]*/g;
+      // 題目提示和答題回饋用同一套念法：整句念、句子之間停一樣久、語速相同
+      const re = /[^。！？～~!?]+[。！？～~!?]*/g;
       const parts = (t.match(re) || [t]).map(c => c.trim()).filter(Boolean);
       const base = TONE[mood] || TONE.normal;
       let done = false;
@@ -954,22 +956,15 @@ function speak(t, mood = 'normal', slow = false) {
         if (i >= parts.length) return finish();
         const c = parts[i], u = new SpeechSynthesisUtterance(c);
         u.lang = VOICE ? VOICE.lang : 'zh-TW'; if (VOICE) u.voice = VOICE;
-        const q = /[？?]$/.test(c), ex = /[！!～~]$/.test(c), comma = /[，、,]$/.test(c);
-        const contour = i === 0 ? .04 : (i % 2 ? -.05 : .03);
-        if (slow) {
-          // 說明：每一句都用同一個音高、同一個速度（不加隨機變化），每個單元聽起來一致
-          u.pitch = 1.05;
-          u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
-        } else {
-          u.pitch = Math.max(.92, Math.min(1.35, base + contour + (Math.random() - .5) * .14 + (q ? .12 : 0) + (ex ? .08 : 0)));
-          u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
-        }
+        // 音高：題目提示固定；回饋依心情只有小幅高低（開心稍高、難過稍低），不加隨機變化
+        u.pitch = slow ? 1.05 : Math.max(.98, Math.min(1.12, 1.05 + (base - TONE.normal) * .5));
+        u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
         u.volume = 1;
-        const gap = slow ? (comma ? 300 : 450) / talkSpeed() : 0;
+        const gap = 380 / talkSpeed();
         let next = false;
         const go = () => { if (next) return; next = true; if (i + 1 >= parts.length) finish(); else setTimeout(() => say(i + 1), gap); };
         u.onend = u.onerror = go;
-        setTimeout(go, (slow ? 700 : 400) * [...c].length + 2500);
+        setTimeout(go, 600 * [...c].length + 2500);
         speechSynthesis.speak(u);
       };
       say(0);
@@ -1972,9 +1967,34 @@ GAMES['art2-3'] = GAMES['art3-4'] = GAMES['art4-6'] = (dom, age) => {
     st.querySelectorAll('.tmpl').forEach(b => b.classList.toggle('sel', b.dataset.t === k));
     if (!k) { guide.innerHTML = ''; demo.hidden = true; talk('自由畫畫，想畫什麼都可以！', 'happy'); return; }
     guide.innerHTML = TPL[k].s; demo.innerHTML = TPL[k].s; demo.hidden = false;
-    const parts = [...demo.children]; let t = 0;
-    parts.forEach(p => { const len = Math.ceil(p.getTotalLength ? p.getTotalLength() : 200); p.style.strokeDasharray = len; p.style.strokeDashoffset = len; p.animate([{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: 1365, delay: t, fill: 'forwards' }); t += 1260; });
     talk(`我們來畫${TPL[k].n}！先看豆豆畫，再跟著虛線畫畫看！`, 'happy');
+    playDemo();
+  }
+  // 筆畫照長度分配時間：整張圖大約 8 秒畫完，每一筆之間停一下，小圓點（筆尖）帶著孩子的眼睛走
+  const DEMO_MS = 8000, PAUSE_MS = 600;
+  let demoId = 0;
+  function playDemo() {
+    const id = ++demoId, g = G;
+    const parts = [...demo.children].filter(p => p.getTotalLength);
+    const lens = parts.map(p => Math.max(1, Math.ceil(p.getTotalLength())));
+    const total = lens.reduce((a, b) => a + b, 0);
+    parts.forEach((p, i) => { p.style.strokeDasharray = lens[i]; p.style.strokeDashoffset = lens[i]; });
+    const pen = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); pen.setAttribute('r', 7); pen.setAttribute('class', 'pen'); demo.appendChild(pen);
+    demo.classList.add('big');
+    let i = 0, t0 = 0;
+    const durOf = k => Math.max(1200, DEMO_MS * lens[k] / total);
+    const step = now => {
+      if (id !== demoId || G !== g || !demo.isConnected) return;
+      if (!t0) t0 = now;
+      if (i >= parts.length) { pen.remove(); later(() => { if (id === demoId) demo.classList.remove('big'); }, 900); return; }
+      if (now < t0) return tick();
+      const f = Math.min(1, (now - t0) / durOf(i)), at = lens[i] * f, pt = parts[i].getPointAtLength(at);
+      parts[i].style.strokeDashoffset = lens[i] - at; pen.setAttribute('cx', pt.x); pen.setAttribute('cy', pt.y);
+      if (f >= 1) { i++; t0 = now + PAUSE_MS; }
+      tick();
+    };
+    const tick = () => later(() => step(performance.now()), 30);
+    later(() => step(performance.now()), 700);
   }
   st.querySelector('.tmpl-row').onclick = e => { const b = e.target.closest('.tmpl'); if (!b) return; sfx.tap(); setTpl(b.dataset.t); };
   let tool = { t: 'pen', c: colors[0] }, width = sizes[small ? 2 : 1], drawing = false, last = null, hue = 0;
