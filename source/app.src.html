@@ -496,27 +496,23 @@ textarea.text{min-height:90px;font-size:14px;resize:vertical}
 .plate.over,.car.slot.over{outline:4px dashed var(--dc);outline-offset:4px;transform:scale(1.08)}
 .drag-hint{position:absolute;font-size:44px;z-index:8;pointer-events:none;margin:-22px 0 0 -22px}
 #break-count{font-variant-numeric:tabular-nums}
-/* 注音：每個字右邊直式小注音 */
-.zy{display:inline-flex;align-items:center;vertical-align:top;white-space:nowrap;margin-right:.1em}
-.zc{display:block;line-height:1;height:1em}
-/* 注音欄：和字一樣高，上下對齊；每個符號約字高的 1/3 */
-.zp{position:relative;display:inline-flex;flex-direction:column;justify-content:center;align-items:center;height:1em;width:.4em;margin-left:.05em;line-height:1}
-.zs{position:relative;display:block;font-size:.37em;line-height:.9;height:.9em;text-align:center;font-weight:600}
-.zp.n1 .zs,.zp.n2 .zs{line-height:1;height:1em}
-.zt{position:absolute;left:92%;top:-.38em;font-size:1em;line-height:1}
-.zl{position:absolute;top:-.12em;left:50%;transform:translateX(-50%);font-size:.37em;line-height:1}
-/* 開注音時，小字放大一點，注音才看得清楚 */
-body:not(.no-zy) :is(small,.muted,.tip,.p-row > span,.tile > small){font-size:max(1em,16px)}
-/* 注音各部分的大小鎖住，不受外面「某某 span」樣式影響 */
-.zy .zc{font-size:1em!important;display:block!important;line-height:1!important;height:1em!important;font-weight:inherit!important;color:inherit!important}
-.zy .zp{font-size:1em!important;display:inline-flex!important;color:inherit!important}
-.zy .zs{font-size:.37em!important;display:block!important;line-height:.9!important;height:.9em!important;font-weight:600!important;color:inherit!important;margin:0!important;padding:0!important}
-.zy .zp.n1 .zs,.zy .zp.n2 .zs{line-height:1!important;height:1em!important}
-.zy .zt{font-size:1em!important;display:inline!important;color:inherit!important}
-.zy .zl{font-size:.37em!important;display:inline!important;color:inherit!important}
-body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.75}
+/* 注音：每個字是固定比例的框——字 1×1、右邊注音欄同高；符號位置由程式算好，不受字型影響 */
+.zy{display:inline-block;position:relative;font-size:1.25em;width:1.5em;height:1.3em;line-height:1.3em;vertical-align:baseline;white-space:nowrap}
+/* 框裡放一個看不見的全形空白，讓這個框的基線和一般文字一樣，整行才會對齊 */
+.zy::before{content:'　';display:inline-block;width:1em;line-height:1.3em}
+.no-zy .zy::before{content:none}
+.zy .zc{display:inline-block!important;position:absolute!important;left:0;top:.15em;width:1em!important;height:1em!important;line-height:1em!important;font-size:1em!important;text-align:center;font-weight:inherit!important;color:inherit!important}
+.zy .zp{display:block!important;position:absolute!important;left:1.03em;top:.2em;width:.36em;height:1em;font-size:1em!important;color:inherit!important}
+.zy .zs,.zy .zt,.zy .zl{display:block!important;position:absolute!important;font-size:.29em!important;line-height:1.149!important;height:1.149em!important;margin:0!important;padding:0!important;color:inherit!important;font-weight:600!important;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif}
+.zy .zs{left:0;width:1.24em;text-align:center}
+.zy .zt{left:1.05em}
+.zy .zl{left:0;width:1.24em;text-align:center}
+.no-zy .zy{width:auto;font-size:1em;height:auto;line-height:inherit}
+.no-zy .zy .zc{position:static!important;width:auto!important;height:auto!important;line-height:inherit!important}
 .no-zy .zp{display:none!important}
-.no-zy .zy{margin-right:0}
+/* 開注音時，小字放大一點，注音才看得清楚 */
+body:not(.no-zy) :is(small,.muted,.tip,.p-row > span,.tile > small){font-size:max(1em,15px)}
+body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.6}
 /* 點點數一數：大數字用不同的顏色 */
 .num-alt .bignum{color:var(--soc);-webkit-text-stroke:5px #fff;paint-order:stroke fill}
 /* 表情念到哪一個，就亮哪一個 */
@@ -2317,24 +2313,37 @@ $('#p-back').onclick = goHome;
 /* ================= 注音：畫面上所有中文旁邊加注音（家長區可以關掉） ================= */
 const ZYD = {/*@ZHUYIN@*/};
 const HAN = /[㐀-鿿]/;
-function zyRead(s, i) {
-  const c = s[i], p = HAN.test(s[i - 1] || '') ? s[i - 1] : '_', n = HAN.test(s[i + 1] || '') ? s[i + 1] : '_', C = ZYD.c || {};
-  return C[p + c + n] || C[p + c + '_'] || C['_' + c + n] || (ZYD.d || {})[c];
+// 從第 i 個字開始，找字典裡最長的詞；沒有就用單字最常用的讀音（字典由教育部辭典校對過）
+function zyReadAll(s) {
+  const out = new Array(s.length).fill(null), W = ZYD.w || {}, D = ZYD.d || {};
+  for (let i = 0; i < s.length;) {
+    if (!HAN.test(s[i])) { i++; continue; }
+    let hit = 0;
+    for (let L = Math.min(6, s.length - i); L > 1; L--) { const r = W[s.substr(i, L)]; if (r) { for (let k = 0; k < L; k++) out[i + k] = r[k]; hit = L; break; } }
+    if (hit) { i += hit; continue; }
+    out[i] = D[s[i]] || null; i++;
+  }
+  return out;
 }
-const ZY_TONE = 'ˊˇˋ';
+// 固定比例：字 1×1，右邊注音欄和字一樣高；每個符號佔 1/3 高，位置用計算的，不受裝置字型影響
+const ZY_TONE = 'ˊˇˋ', ZY_SLOT = 1 / 3;
 function zyHTML(r) {
   let light = false, tone = '', sy = [...r];
   if (sy[0] === '˙') { light = true; sy.shift(); }
   if (ZY_TONE.includes(sy[sy.length - 1])) tone = sy.pop();
-  const parts = sy.map((c, i) => `<span class="zs">${c}${i === sy.length - 1 && tone ? `<span class="zt">${tone}</span>` : ''}</span>`);
-  return `<span class="zp n${sy.length}${light ? ' lt' : ''}" aria-hidden="true">${light ? '<span class="zl">˙</span>' : ''}${parts.join('')}</span>`;
+  // 位置用「注音欄高度的百分比」：每個符號一格 1/3，置中
+  const n = sy.length, top0 = (1 - n * ZY_SLOT) / 2, pc = v => (v * 100).toFixed(2) + '%';
+  let h = sy.map((c, k) => `<span class="zs" style="top:${pc(top0 + k * ZY_SLOT)}">${c}</span>`).join('');
+  if (tone) h += `<span class="zt" style="top:${pc(top0 + (n - 1) * ZY_SLOT - .08)}">${tone}</span>`;
+  if (light) h += `<span class="zl" style="top:${pc(Math.max(-.22, top0 - .22))}">˙</span>`;
+  return `<span class="zp" aria-hidden="true">${h}</span>`;
 }
 const zyOk = e => e && !e.closest('.zy,svg,[data-nozy],script,style,textarea,select,option,title,canvas');
 function zyNode(t) {
   const s = t.nodeValue; if (!HAN.test(s)) return;
-  const f = document.createDocumentFragment(); let buf = '', any = false;
+  const f = document.createDocumentFragment(), rs = zyReadAll(s); let buf = '', any = false;
   for (let i = 0; i < s.length; i++) {
-    const ch = s[i], r = HAN.test(ch) ? zyRead(s, i) : null;
+    const ch = s[i], r = rs[i];
     if (!r) { buf += ch; continue; }
     if (buf) { f.append(buf); buf = ''; }
     const z = document.createElement('span'); z.className = 'zy';

@@ -18,7 +18,8 @@ for f in sorted((ROOT / 'sounds').iterdir()):
 import sys
 sys.path.insert(0, str(ROOT))
 from zhuyin_build import build as zhuyin_dict  # 注音字典（需要 pypinyin、opencc）
-src =src.replace('{/*@ZHUYIN@*/}', json.dumps(zhuyin_dict(src), ensure_ascii=False))
+moe = json.loads((ROOT / 'zhuyin_moe.json').read_text(encoding='utf-8'))  # 從教育部辭典裁切出的詞
+src = src.replace('{/*@ZHUYIN@*/}', json.dumps(zhuyin_dict(src, moe), ensure_ascii=False))
 marker = '{/*@SOUNDS@*/}'
 assert marker in src, 'app.src.html 裡找不到音效標記'
 out = src.replace(marker, json.dumps(sounds))
