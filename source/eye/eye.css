@@ -1,0 +1,116 @@
+/* ================= 眼睛控制版 ================= */
+/* 注視點、停留進度圈 */
+#gz-cursor{position:fixed;left:0;top:0;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;z-index:200;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,255,255,.95) 0 22%,rgba(115,80,204,.55) 23% 60%,rgba(115,80,204,0) 62%);transition:opacity .3s;will-change:transform}
+#gz-cursor.off{opacity:0}
+#gz-ring{position:fixed;z-index:199;pointer-events:none;display:none;--p:0;padding:10px;box-sizing:border-box;
+  background:conic-gradient(var(--soc) calc(var(--p) * 1turn),rgba(47,108,196,.2) 0);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.gz-on{outline:5px solid var(--soc);outline-offset:4px}
+/* 鏡頭小視窗：綠色＝看到臉，紅色＝看不到 */
+#eye-cam{position:fixed;left:10px;bottom:10px;width:104px;height:78px;border-radius:14px;z-index:150;object-fit:cover;transform:scaleX(-1);background:#000;border:4px solid #E5484D;pointer-events:none;opacity:.92}
+#eye-cam.face{border-color:#1F8559}
+#eye-cam.hide{display:none}
+/* 啟動、校正、看不到臉 */
+.eye-layer{position:fixed;inset:0;z-index:120;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;background:var(--bg);background-image:var(--bg-grad)}
+.eye-layer.on{display:flex}
+.eye-layer h1{font-size:clamp(28px,5vw,44px);margin:0}
+.eye-layer p{font-size:clamp(18px,3vw,26px);margin:0;max-width:760px;line-height:1.5}
+.eye-steps{display:flex;flex-direction:column;gap:10px;font-size:20px;text-align:left}
+.eye-steps span{opacity:.45}.eye-steps span.ok{opacity:1}.eye-steps span.now{opacity:1;font-weight:900}
+#eye-cal{background:var(--bg)}
+#cal-star{position:fixed;left:0;top:0;width:96px;height:96px;margin:-48px 0 0 -48px;font-size:76px;line-height:96px;text-align:center;transition:transform .7s cubic-bezier(.4,1.4,.5,1);z-index:2}
+#cal-star.grab{animation:calGrab 1.1s ease-in-out}
+@keyframes calGrab{0%{transform:var(--t) scale(1)}50%{transform:var(--t) scale(.55)}100%{transform:var(--t) scale(1)}}
+#cal-text{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:.85}
+.eye-banner{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:160;background:#FFF0AE;color:#2F2A44;border:3px solid #946C00;border-radius:20px;padding:10px 18px;font-size:20px;font-weight:800;box-shadow:0 5px 0 #946C00;max-width:92vw;text-align:center}
+.eye-banner[hidden]{display:none}
+/* 字幕：豆豆說話時大大的顯示在下方 */
+.eye-mode .say{position:fixed;left:50%;right:auto;top:auto;bottom:18px;transform:translateX(-50%);max-width:min(92vw,900px);font-size:clamp(20px,3.2vw,30px);padding:14px 24px;z-index:140;text-align:center}
+/* 大大的目標，彼此分開 */
+.eye-mode .tiles{grid-template-columns:repeat(3,1fr);gap:clamp(14px,3vw,34px)}
+@media (max-aspect-ratio:1/1){.eye-mode .tiles{grid-template-columns:repeat(2,1fr)}}
+.eye-mode .tile{min-height:min(26vh,230px);justify-content:center}
+.eye-mode .tile .ico{width:min(14vh,110px);height:min(14vh,110px);font-size:min(9vh,64px)}
+.eye-mode .tile span{font-size:clamp(18px,2.6vw,26px)}
+.eye-mode .q-opts{gap:clamp(28px,8vw,120px);flex-wrap:nowrap}
+.eye-mode .opt{min-width:min(28vw,250px);min-height:min(24vh,210px);border-radius:40px;border-width:4px}
+.eye-mode .opt .emo{font-size:clamp(70px,11vw,120px)}
+.eye-mode .opt .num{font-size:clamp(70px,11vw,120px)}
+.eye-mode .opt small{font-size:clamp(16px,2.4vw,24px)}
+.eye-mode .opt svg.buddy{width:min(22vw,170px);height:min(22vw,170px)}
+.eye-mode .opt svg.mascot{width:min(18vw,130px);height:min(18vw,130px)}
+.eye-mode .top .help-btn,.eye-mode #h-parent{opacity:.7}
+.eye-mode .who-btn{width:min(30vw,220px);padding:26px 10px}
+.eye-mode .who-btn .av{font-size:64px}
+.eye-bar{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.eye-bar .btn{font-size:20px;padding:16px 26px}
+.eye-sign{align-self:center;display:flex;align-items:center;gap:14px;font-size:clamp(24px,4vw,36px);font-weight:900;background:var(--card);border:4px solid var(--dc);border-radius:24px;padding:8px 24px;box-shadow:0 5px 0 var(--dc)}
+.eye-sign svg{width:56px;height:56px}
+/* 數一數：看一個亮一個 */
+.eye-mode #stage{justify-content:flex-start;gap:12px}
+.eye-mode .scene{max-height:46vh}
+.eye-count .count-box{gap:clamp(18px,4vw,48px)}
+.eye-count .cnt{font-size:clamp(64px,11vw,110px);padding:10px;border-radius:28px}
+.eye-count .cnt.done{background:color-mix(in srgb,var(--dc) 22%,transparent)}
+/* 翻翻牌、豆豆躲貓貓、星星、口令、塗色 */
+.eye-mode .cards{gap:clamp(16px,4vw,40px)}
+.eye-mode .flip{width:min(22vw,170px);height:min(22vw,170px)}
+.peek-field{position:relative;width:100%;height:min(64vh,560px);border-radius:36px;overflow:hidden;border:3px solid var(--line);background:linear-gradient(180deg,var(--sky1),var(--sky2))}
+.peek{position:absolute;width:min(22vw,170px);height:min(22vw,170px);margin:calc(min(22vw,170px) / -2) 0 0 calc(min(22vw,170px) / -2);border-radius:50%;background:var(--card);border:4px solid var(--dc);box-shadow:0 6px 0 var(--dc);display:grid;place-items:center;animation:popIn .45s cubic-bezier(.3,1.5,.5,1)}
+.peek svg{width:80%;height:80%}
+.chase{position:absolute;left:0;top:0;font-size:clamp(70px,10vw,110px);line-height:1;margin:-.5em 0 0 -.5em;will-change:transform;filter:drop-shadow(0 6px 0 rgba(0,0,0,.12))}
+.chase-bar{height:22px;border-radius:999px;background:var(--line);border:2px solid var(--soft);overflow:hidden}
+.chase-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--r1),var(--r3),var(--r4),var(--r5),var(--r6))}
+.cmd-field{position:relative;width:100%;height:min(66vh,580px)}
+.cmd{position:absolute;width:min(24vw,180px);height:min(24vw,180px);border-radius:40px;background:var(--card);border:4px solid var(--line);font-size:clamp(70px,10vw,110px);display:grid;place-items:center}
+.cmd.done{border-color:var(--dc);background:var(--dcs)}
+.cmd-l{left:0;top:50%;transform:translateY(-50%)}.cmd-r{right:0;top:50%;transform:translateY(-50%)}
+.cmd-u{top:0;left:50%;transform:translateX(-50%)}.cmd-d{bottom:0;left:50%;transform:translateX(-50%)}
+.cmd-c{left:50%;top:50%;transform:translate(-50%,-50%);width:min(20vw,140px)}
+.paint-box{position:relative;width:100%;height:min(62vh,560px);border-radius:32px;overflow:hidden;border:4px solid var(--dc);background:#fff}
+.paint-box canvas{position:absolute;inset:0;width:100%;height:100%}
+.dots-box{position:relative;width:100%;height:min(64vh,560px);border-radius:32px;border:4px solid var(--dc);background:#fff;overflow:hidden}
+.dots-box svg{position:absolute;inset:0;width:100%;height:100%}
+.cdot{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:var(--card);border:4px solid var(--soft);font-size:26px;font-weight:900;display:grid;place-items:center;z-index:2}
+.cdot.next{border-color:var(--dc);background:var(--dcs);animation:pulse 1.2s infinite}
+.cdot.done{background:var(--dc);color:#fff;border-color:var(--dc)}
+.fill-box{display:flex;gap:18px;align-items:stretch;justify-content:center;width:100%}
+.fill-box svg{width:min(70vw,560px);height:min(56vh,440px);background:#fff;border-radius:28px;border:4px solid var(--line)}
+.fill-box svg [data-gaze]{stroke:#2F2A44;stroke-width:3;cursor:pointer}
+.fill-box svg .gz-on{outline:none;stroke:var(--soc);stroke-width:7}
+.palette{display:flex;flex-direction:column;gap:16px;justify-content:center}
+.palette button{width:min(14vw,96px);height:min(14vw,96px);border-radius:50%;border:5px solid #fff;box-shadow:0 0 0 3px var(--soft)}
+.palette button.sel{box-shadow:0 0 0 6px var(--btn-ink)}
+.eye-mode .bubble{border:3px solid rgba(255,255,255,.8)}
+.eye-mode .friend .av{width:min(18vw,130px);height:min(18vw,130px);font-size:min(12vw,84px)}
+.eye-mode .friends{top:10px}
+.turn.dd{background:var(--soc-s)}
+/* 設定 */
+.eye-set{display:flex;flex-direction:column;gap:16px;width:100%}
+.eye-set .row{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.eye-set .row b{width:100%;text-align:center;font-size:18px}
+.eye-set .btn{min-width:120px}
+.eye-set .btn.sel{background:var(--dc);color:#fff}
+
+/* 擺位檢查：大大的鏡頭畫面＋臉的框框 */
+#eye-cam.big{left:50%;bottom:auto;top:54%;width:min(64vw,460px);height:min(48vw,345px);transform:translate(-50%,-50%) scaleX(-1);z-index:130;border-width:6px}
+#pos-oval{position:fixed;left:50%;top:54%;width:min(26vw,190px);height:min(34vw,250px);transform:translate(-50%,-50%);border:5px dashed #fff;border-radius:50%;z-index:131;pointer-events:none;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+#pos-msg{position:fixed;left:50%;bottom:6vh;transform:translateX(-50%);z-index:131;font-size:clamp(20px,3vw,28px);font-weight:900;background:#FFF0AE;color:#2F2A44;border:3px solid #946C00;border-radius:18px;padding:10px 20px;margin:0;max-width:92vw}
+#pos-msg.ok{background:#C8F0DC;border-color:#1F8559}
+#eye-boot.pos #boot-mascot,#eye-boot.pos h1,#eye-boot.pos .eye-steps,#eye-boot.pos #boot-help{display:none}
+#eye-boot.pos #boot-msg{position:fixed;top:5vh;left:50%;transform:translateX(-50%);font-size:clamp(22px,3.4vw,32px);font-weight:900}
+
+/* 頭不動、只用眼睛：選項排成一排 */
+.eye-mode .tiles.one-row{grid-template-columns:repeat(4,1fr)!important}
+.next-tile{border-style:dashed}
+.eye-mode .next-tile span,.eye-mode .next-tile small{color:var(--ink)}
+.cmd-row{display:flex;justify-content:space-between;gap:12px;width:100%;margin-top:6vh}
+.cmd-row .cmd{position:static;transform:none}
+.eye-mode .flip{width:min(14vw,150px);height:min(14vw,150px)}
+.eye-count.one-line .count-box{flex-wrap:nowrap}
+.eye-count.one-line .cnt{font-size:clamp(48px,8vw,96px)}
+.swatch{display:block;width:min(16vw,130px);height:min(16vw,130px);border-radius:50%;border:5px solid #fff;box-shadow:0 0 0 3px var(--soft)}
+.fill-box svg .now-fill{stroke:var(--soc);stroke-width:5;stroke-dasharray:6 4;animation:fillPulse 1s ease-in-out infinite}
+@keyframes fillPulse{50%{stroke-width:8}}
+.eye-mode .fill-box svg{height:min(44vh,360px)}
