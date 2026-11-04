@@ -1764,13 +1764,14 @@ const EVENTS = [
 ].map(([k, e]) => ({ k, ...e }));
 const faceOpt = (n, label = true) => ({ html: `${mascot(88, MOODS[n])}${label ? `<small>${n}</small>` : ''}` });
 const FACE_SAY = { 開心: '開心，哈哈哈！', 難過: '難過，嗚嗚嗚。', 生氣: '生氣，哼！', 害怕: '害怕，好可怕！', 驚訝: '驚訝，哇！' };
-// 表情選項一個一個亮起來，配上那個表情的聲音
-async function introFaces(box, names) {
+// 選項一個一個亮起來，同時念出來；念完才能點
+async function introOpts(box, lines, moods = []) {
   const st = $('#stage'); st.classList.add('busy'); await sleep(450);
   const bs = [...box.querySelectorAll('.opt')];
-  for (let k = 0; k < bs.length && G; k++) { bs[k].classList.add('say-now'); jump(bs[k]); await talk(FACE_SAY[names[k]], MOODS[names[k]]); bs[k].classList.remove('say-now'); await sleep(200); }
+  for (let k = 0; k < bs.length && G; k++) { bs[k].classList.add('say-now'); jump(bs[k]); await talk(lines[k], moods[k]); bs[k].classList.remove('say-now'); await sleep(200); }
   st.classList.remove('busy');
 }
+const introFaces = (box, names) => introOpts(box, names.map(n => FACE_SAY[n]), names.map(n => MOODS[n]));
 // 3–4 歲：看事件動畫，選豆豆的心情
 GAMES['emo3-4'] = (dom) => rounds(dom, 5, async (i, lv) => {
   const { ev } = fresh(() => { const ev = pick(EVENTS); return { ev, key: ev.k }; });
@@ -1808,8 +1809,9 @@ GAMES['emo4-6'] = (dom) => rounds(dom, 4, async (i, lv) => {
   const pr = choose(box, opts.map(n => ({ ...faceOpt(n), ok: n === ev.a, say: n === ev.a ? `對，豆豆覺得${n}！` : `這是${n}` })), { right: () => setBody(slot, MOODS[ev.a]), wait: 1800 });
   await introFaces(box, opts); await pr;
   await prompt(ev.a === '開心' ? '開心的時候，可以怎麼做？選一個好方法！' : `覺得${ev.a}的時候，豆豆可以怎麼做呢？選一個好方法！`);
-  const c = COPE[ev.a], list = [...sample(c.ok, lv >= 2 ? 1 : 2).map(x => [...x, 1]), ...sample(c.no, lv >= 2 ? 2 : 1).map(x => [...x, 0])];
-  await choose(box, shuffle(list.map(([e, t, ok]) => ({ html: `<span class="emo" style="font-size:48px">${e}</span><small>${t}</small>`, ok: !!ok, say: ok ? `好方法！${t}。` : '這樣可能不太好' }))), { right: () => setBody(slot, 'happy'), wait: 2000 });
+  const c = COPE[ev.a], list = shuffle([...sample(c.ok, lv >= 2 ? 1 : 2).map(x => [...x, 1]), ...sample(c.no, lv >= 2 ? 2 : 1).map(x => [...x, 0])]);
+  const pr2 = choose(box, list.map(([e, t, ok]) => ({ html: `<span class="emo" style="font-size:48px">${e}</span><small>${t}</small>`, ok: !!ok, say: ok ? `好方法！${t}。` : '這樣可能不太好' })), { right: () => setBody(slot, 'happy'), wait: 2000 });
+  await introOpts(box, list.map(x => x[1])); await pr2;
   wrap.remove();
 });
 
