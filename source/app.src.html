@@ -601,7 +601,7 @@ body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.6}
   <section><h3>介紹</h3>
     <p>給 2–6 歲小朋友和家長一起玩的互動遊戲。依照《幼兒園教保活動課程大綱》六大領域設計：認知、語文、情緒、身體動作、社會、美感。2–3、3–4、4–6 歲各有不同玩法。</p></section>
   <section><h3>功能</h3><ul>
-    <li>18 種遊戲，一關一關變難；每個單元約 15 分鐘，題目不重複</li>
+    <li>18 種遊戲，一關一關變難；每個單元約 10 分鐘，題目不重複</li>
     <li>豆豆會念出題目和作答方式；家長也能錄自己的聲音取代</li>
     <li>可錄音、錄影親子遊玩過程，並在家長區回顧題目</li>
     <li>單元結束休息 3 分鐘，每天有遊玩時間上限</li>
@@ -809,7 +809,7 @@ function ac() {
     BUS = AC.createGain(); BUS.gain.value = .9; BUS.connect(comp).connect(AC.destination);
     SFXB = AC.createGain(); SFXB.gain.value = 1.8; SFXB.connect(BUS);
   }
-  if (AC.state === 'suspended') AC.resume();
+  if (AC.state !== 'running') AC.resume().catch(() => {});
   return AC;
 }
 const now = () => ac().currentTime + .01;
@@ -924,6 +924,9 @@ function pickVoice() {
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 // iOS 需要先在點擊時「喚醒」語音
 addEventListener('pointerdown', () => { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {} }, { once: true });
+const wakeAudio = () => { try { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); speechSynthesis.resume(); } catch (e) {} };
+addEventListener('pointerdown', wakeAudio);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeAudio(); });
 // 語氣：像大人陪孩子說話，輕快有起伏；每一句的音高、速度都不一樣，問句上揚、驚嘆句更有精神
 const TONE = { normal: 1.12, happy: 1.2, surprised: 1.24, sad: 1, scared: 1.05, angry: 1.04, think: 1.1 };
 // 念不準的字：只換掉念出來的聲音，畫面文字不變（用 Windows 中文語音逐字檢查過）
@@ -939,11 +942,13 @@ const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (
 // 題目說明（原本 .55／.73）和答題回饋（原本約 1.17）取平均，所有語音都用這個速度
 const TALK_RATE = MOBILE ? .86 : .95;
 const talkSpeed = () => Math.max(.7, Math.min(1.3, +(S.set.talkSpeed || 1)));
-let SPEAK_ID = 0;
+let SPEAK_ID = 0, CUR_UTTER = null;
 function speak(t, mood = 'normal', slow = false) {
   return new Promise(res => {
     try {
-      speechSynthesis.cancel(); t = sayFix(t);
+      const wasBusy = speechSynthesis.speaking || speechSynthesis.pending;
+      if (wasBusy) speechSynthesis.cancel();
+      t = sayFix(t);
       const id = ++SPEAK_ID;
       // 題目提示和答題回饋用同一套念法：整句念、句子之間停一樣久、語速相同
       const re = /[^。！？～~!?]+[。！？～~!?]*/g;
@@ -954,20 +959,30 @@ function speak(t, mood = 'normal', slow = false) {
       const say = i => {
         if (id !== SPEAK_ID) return finish();
         if (i >= parts.length) return finish();
-        const c = parts[i], u = new SpeechSynthesisUtterance(c);
-        u.lang = VOICE ? VOICE.lang : 'zh-TW'; if (VOICE) u.voice = VOICE;
-        // 音高：題目提示固定；回饋依心情只有小幅高低（開心稍高、難過稍低），不加隨機變化
-        u.pitch = slow ? 1.05 : Math.max(.98, Math.min(1.12, 1.05 + (base - TONE.normal) * .5));
-        u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
-        u.volume = 1;
-        const gap = 380 / talkSpeed();
-        let next = false;
-        const go = () => { if (next) return; next = true; if (i + 1 >= parts.length) finish(); else setTimeout(() => say(i + 1), gap); };
-        u.onend = u.onerror = go;
-        setTimeout(go, 600 * [...c].length + 2500);
-        speechSynthesis.speak(u);
+        const c = parts[i], gap = 380 / talkSpeed();
+        let next = false, tries = 0, cur = 0;
+        const go = () => { if (next) return; next = true; cur = 0; if (i + 1 >= parts.length) finish(); else setTimeout(() => say(i + 1), gap); };
+        const attempt = () => {
+          if (next || id !== SPEAK_ID) return go();
+          const me = cur = ++tries, u = CUR_UTTER = new SpeechSynthesisUtterance(c);  // 留著參照，語音物件才不會被回收
+          let started = false;
+          u.lang = VOICE ? VOICE.lang : 'zh-TW'; if (VOICE) u.voice = VOICE;
+          // 音高：題目提示固定；回饋依心情只有小幅高低（開心稍高、難過稍低），不加隨機變化
+          u.pitch = slow ? 1.05 : Math.max(.98, Math.min(1.12, 1.05 + (base - TONE.normal) * .5));
+          u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
+          u.volume = 1;
+          u.onstart = () => { started = true; };
+          u.onend = () => { if (me === cur) go(); };
+          u.onerror = e => { if (me !== cur) return; if (!started && tries < 2 && !/interrupted|canceled/.test(e.error || '')) attempt(); else go(); };
+          // 2.5 秒還沒開始念：重來一次
+          setTimeout(() => { if (me === cur && !started && tries < 2 && id === SPEAK_ID) { cur = 0; speechSynthesis.cancel(); setTimeout(attempt, 120); } }, 2500);
+          setTimeout(() => { if (me === cur) go(); }, 600 * [...c].length + 2500);
+          speechSynthesis.resume(); speechSynthesis.speak(u);
+        };
+        attempt();
       };
-      say(0);
+      // 剛取消就馬上念，有些瀏覽器會把新句子一起丟掉，所以稍等一下
+      if (wasBusy) setTimeout(() => say(0), 100); else say(0);
     } catch (e) { res(); }
   });
 }
@@ -1164,7 +1179,7 @@ const cheer = () => jump($('#g-mascot svg'));
 // 每題開始前：開場音效＋豆豆卡通提示聲
 async function prompt(text, mood = 'normal') {
   if (G) { if (G.item && !G.item.q) G.item.q = text; if (!G.firstQ) G.firstQ = text; }
-  const st = $('#stage'); st.classList.add('busy');
+  const st = $('#stage'); st.classList.add('busy'); wakeAudio();
   await ANIMAL; await TALKING;
   await sleep(120);
   const p = talk(text, mood, true); jump($('#g-mascot svg'));
@@ -1173,8 +1188,8 @@ async function prompt(text, mood = 'normal') {
 }
 function praise(t) { sfx.right(); cheer(); return talk(t || pick(PRAISE), 'happy'); }
 function oops(t) { if (G && G.item) G.item.tries++; sfx.wrong(); return talk(t ? `${t}，${pick(RETRY)}` : pick(RETRY), 'normal'); }
-// 每個單元至少玩 15 分鐘：一關一關往下玩，同一個單元裡題目不重複，下次再玩也會先出沒玩過的題目
-const UNIT_SEC = 15 * 60;
+// 每個單元至少玩 10 分鐘：一關一關往下玩，同一個單元裡題目不重複，下次再玩也會先出沒玩過的題目
+const UNIT_SEC = 10 * 60;
 const SEEN_KEY = 'doudou-seen';
 const seenAll = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; } catch (e) { return {}; } };
 function fresh(gen) {
@@ -1188,7 +1203,7 @@ function fresh(gen) {
 }
 const lvl = (lv, arr) => arr[Math.min(lv, arr.length - 1)];
 function playClock() { if (G.clock) return; G.play = 0; G.clock = every(() => { if (!document.hidden && !ovOpen()) G.play++; }, 1000); }
-// 依序進行：每關 per 題，玩滿 15 分鐘後在該關結束時完成單元
+// 依序進行：每關 per 題，玩滿 10 分鐘後在該關結束時完成單元
 async function rounds(dom, per, fn) {
   const g = G, st = $('#stage');
   G.seen = new Set(); playClock();
