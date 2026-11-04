@@ -1,0 +1,15 @@
+{
+  "name": "豆豆遊樂園",
+  "short_name": "豆豆遊樂園",
+  "description": "給 2–6 歲小朋友與家長的親子互動遊戲",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFF7EC",
+  "theme_color": "#FFF7EC",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
