@@ -518,7 +518,6 @@ body:not(.no-zy) :is(small,.muted,.tip,.p-row > span,.tile > small){font-size:ma
 body:not(.no-zy) :is(p,li,.tip,.story,.say,.bubble-say){line-height:1.6}
 /* 點點數一數：大數字用不同的顏色 */
 .num-alt .bignum{color:var(--soc);-webkit-text-stroke:5px #fff;paint-order:stroke fill}
-.sound-tap{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99;padding:14px 20px;border-radius:999px;background:#FF7A45;color:#fff;font-size:18px;font-weight:800;box-shadow:0 6px 0 #C9531F,0 12px 28px rgba(0,0,0,.3);white-space:nowrap}
 .num-pick .num{color:#fff!important;-webkit-text-stroke:0}
 .num-pick .opt{background:#2E9E6B!important;border-color:#1F7A50!important}
 .num-pick .opt:hover{border-color:#fff!important}
@@ -808,6 +807,7 @@ function ac() {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     const comp = AC.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
     BUS = AC.createGain(); BUS.gain.value = .9; BUS.connect(comp).connect(AC.destination);
+    const keep = AC.createOscillator(), keepG = AC.createGain(); keepG.gain.value = .00001; keep.connect(keepG).connect(AC.destination); keep.start();
     SFXB = AC.createGain(); SFXB.gain.value = 1.8; SFXB.connect(BUS);
   }
   if (AC.state !== 'running') AC.resume().catch(() => {});
@@ -923,8 +923,9 @@ function pickVoice() {
   VOICE = best;
 }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-// iOS 需要先在點擊時「喚醒」語音
-addEventListener('pointerdown', () => { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (e) {} }, { once: true });
+// iOS 需要先在點擊時「喚醒」語音（要念真的字：空白句子會卡住語音引擎）
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+if (IOS) addEventListener('pointerdown', () => { try { const u = new SpeechSynthesisUtterance('嗯'); u.lang = 'zh-TW'; u.volume = 0; speechSynthesis.speak(u); } catch (e) {} }, { once: true });
 const wakeAudio = () => { try { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); speechSynthesis.resume(); } catch (e) {} };
 addEventListener('pointerdown', wakeAudio);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeAudio(); });
@@ -943,28 +944,16 @@ const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (
 // 題目說明（原本 .55／.73）和答題回饋（原本約 1.17）取平均，所有語音都用這個速度
 const TALK_RATE = MOBILE ? .86 : .95;
 const talkSpeed = () => Math.max(.7, Math.min(1.3, +(S.set.talkSpeed || 1)));
-let SPEAK_ID = 0, CUR_UTTER = null, TAP_BTN = null, TAP_HOLD = null;
-function hideSoundTap() { clearTimeout(TAP_HOLD); if (TAP_BTN) { TAP_BTN.remove(); TAP_BTN = null; } }
-// 等孩子點一下；15 秒沒點就繼續，遊戲不會卡住
-function showSoundTap(onTap, onSkip) {
-  hideSoundTap();
-  const b = TAP_BTN = document.createElement('button'); b.className = 'sound-tap'; b.textContent = '🔊 點一下聽聲音';
-  b.onclick = () => { hideSoundTap(); wakeAudio(); onTap(); };
-  document.body.appendChild(b);
-  TAP_HOLD = setTimeout(() => { hideSoundTap(); onSkip(); }, 15000);
-}
+let SPEAK_ID = 0, CUR_UTTER = null;
 // 每題開始前確認音效引擎醒著
 async function soundCheck() {
   if (!AC || AC.state === 'running' || document.hidden) return;
   wakeAudio();
   await new Promise(r => setTimeout(r, 400));
-  if (AC.state === 'running') return;
-  await new Promise(r => showSoundTap(r, r));
 }
 function speak(t, mood = 'normal', slow = false) {
   return new Promise(res => {
     try {
-      hideSoundTap();
       const wasBusy = speechSynthesis.speaking || speechSynthesis.pending;
       if (wasBusy) speechSynthesis.cancel();
       t = sayFix(t);
@@ -973,15 +962,16 @@ function speak(t, mood = 'normal', slow = false) {
       const re = /[^。！？～~!?]+[。！？～~!?]*/g;
       const parts = (t.match(re) || [t]).map(c => c.trim()).filter(Boolean);
       const base = TONE[mood] || TONE.normal;
-      let done = false;
+      let done = false, flushed = false;
       const finish = () => { if (!done) { done = true; res(); } };
       const say = i => {
         if (id !== SPEAK_ID) return finish();
         if (i >= parts.length) return finish();
+        if (i > 0 && !flushed && (speechSynthesis.speaking || speechSynthesis.pending)) { flushed = true; speechSynthesis.cancel(); return setTimeout(() => say(i), 120); }
+        flushed = false;
         const c = parts[i], gap = 380 / talkSpeed();
         let next = false, tries = 0, cur = 0;
         const go = () => { if (next) return; next = true; cur = 0; if (i + 1 >= parts.length) finish(); else setTimeout(() => say(i + 1), gap); };
-        const askTap = () => { cur = 0; speechSynthesis.cancel(); showSoundTap(() => { tries = 0; attempt(); }, go); };
         const attempt = () => {
           if (next || id !== SPEAK_ID) return go();
           const me = cur = ++tries, u = CUR_UTTER = new SpeechSynthesisUtterance(c);  // 留著參照，語音物件才不會被回收
@@ -991,12 +981,12 @@ function speak(t, mood = 'normal', slow = false) {
           u.pitch = slow ? 1.05 : Math.max(.98, Math.min(1.12, 1.05 + (base - TONE.normal) * .5));
           u.rate = Math.max(.5, Math.min(1.3, TALK_RATE * talkSpeed()));
           u.volume = 1;
-          u.onstart = () => { started = true; if (TAP_BTN && me === tries) { hideSoundTap(); cur = me; } };
+          u.onstart = () => { started = true; };
           u.onend = () => { if (me === cur) go(); };
-          u.onerror = e => { if (me !== cur) return; if (started || /interrupted|canceled/.test(e.error || '')) go(); else if (tries < 2) attempt(); else askTap(); };
-          // 2.5 秒還沒開始念：重來一次，還是不行就請孩子點一下
-          setTimeout(() => { if (me !== cur || started || id !== SPEAK_ID) return; if (tries >= 2) return askTap(); cur = 0; speechSynthesis.cancel(); setTimeout(attempt, 120); }, 2500);
-          setTimeout(() => { if (me === cur) go(); }, 600 * [...c].length + 2500);
+          u.onerror = e => { if (me !== cur) return; if (started || /interrupted|canceled/.test(e.error || '')) go(); else if (tries < 3) setTimeout(attempt, 200); else go(); };
+          // 3 秒後句子不見了（沒在念也沒在排隊）：自動重念，最多三次
+          setTimeout(() => { if (me !== cur || started || id !== SPEAK_ID || speechSynthesis.speaking || speechSynthesis.pending || tries >= 3) return; cur = 0; attempt(); }, 3000);
+          setTimeout(() => { if (me === cur) go(); }, 600 * [...c].length + 3000);
           speechSynthesis.resume(); speechSynthesis.speak(u);
         };
         attempt();
@@ -1075,7 +1065,7 @@ async function playAnimalNow(k) {
     } catch (e) { res(); }
   });
 }
-function stopSounds() { stopMusic(); hideSoundTap(); try { if (curAudio) curAudio.pause(); if (lineAudio) lineAudio.pause(); speechSynthesis.cancel(); } catch (e) {} }
+function stopSounds() { stopMusic(); try { if (curAudio) curAudio.pause(); if (lineAudio) lineAudio.pause(); speechSynthesis.cancel(); } catch (e) {} }
 
 /* ================= 特效 ================= */
 const FXC = ['#4F8DFD', '#FF7A59', '#2FBF84', '#FFB020', '#A06BFF', '#FF5C9A'];
