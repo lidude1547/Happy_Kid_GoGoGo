@@ -893,9 +893,8 @@ const SFX = {
 const sfx = new Proxy(SFX, { get: (o, k) => (S.set.sfx ? o[k] : () => {}) });
 // 音樂（木頭人）
 let MUSIC = null;
-function startMusic(bpm = 128, vol = 1) {
+function startMusic(bpm = 128, vol = 1, mel = [0, 2, 4, 2, 4, 5, 4, 2]) {
   stopMusic(); const step = 60 / bpm / 2; let next = ac().currentTime + .05, i = 0, n = 4;
-  const mel = [0, 2, 4, 2, 4, 5, 4, 2];
   MUSIC = setInterval(() => {
     const A = ac();
     while (next < A.currentTime + .2) {
@@ -1601,9 +1600,10 @@ GAMES['move2-3'] = (dom) => rounds(dom, 4, async (i, lv) => {
   const fg = wrap.querySelector('.fg'), btn = wrap.querySelector('.btn');
   setSpeed(wrap.querySelector('.mv-who'), sp.r);
   await prompt(`看豆豆怎麼做。跟豆豆一起，${sp.t}${m.t}！`, 'happy'); setQ(`${sp.t}${m.t}`);
+  startMusic({ s: 88, f: 152, q: 104 }[sp.k] || 120, { q: .6, b: 1.2 }[sp.k] || 1, [0, 4, 2, 4, 0, 4, 5, 4]);
   let left = sec;
   await new Promise(res => {
-    const iv = every(() => { left--; fg.style.strokeDashoffset = C * (1 - left / sec); if (left <= 0) { clearInterval(iv); btn.hidden = false; btn.classList.add('pulse'); talk('做完了嗎？按「做好了」！'); } }, 1000);
+    const iv = every(() => { left--; fg.style.strokeDashoffset = C * (1 - left / sec); if (left <= 0) { clearInterval(iv); stopMusic(); btn.hidden = false; btn.classList.add('pulse'); talk('做完了嗎？按「做好了」！'); } }, 1000);
     btn.onclick = () => { btn.onclick = null; burst(btn); praise(pick(['動得真好！', '好棒！', '你好厲害！'])); later(res, 1400); };
   });
   wrap.remove();
